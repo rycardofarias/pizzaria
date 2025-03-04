@@ -1,0 +1,21 @@
+# application-dev.yml
+spring:
+  config:
+    activate:
+      on-profile: dev
+  datasource:
+    driver-class-name: org.postgresql.Driver
+    url: ${DEV_DB_URL}
+    username: ${DEV_DB_USERNAME}
+    password: ${DEV_DB_PASSWORD}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: update
+  security:
+    user:
+      name: ${DEV_SECURITY_USER}
+      password: ${DEV_SECURITY_PASSWORD}
+
+server:
+  port: ${DEV_SERVER_PORT}

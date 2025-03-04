@@ -1,0 +1,12 @@
+logging:
+  file:
+    name: ${LOGGING_FILE_NAME}
+    max-size: ${LOGGING_FILE_MAX_SIZE}
+    max-history: ${LOGGING_FILE_MAX_HISTORY}
+  level:
+    root: ${LOGGING_LEVEL_ROOT}
+    org.springframework: ${LOGGING_LEVEL_SPRING}
+    org.hibernate: ${LOGGING_LEVEL_HIBERNATE}
+    com.pizzaria: ${LOGGING_LEVEL_APP}
+  pattern:
+    console: "%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
