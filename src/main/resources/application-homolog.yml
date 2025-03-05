@@ -4,16 +4,13 @@ spring:
       on-profile: homolog
   datasource:
     driver-class-name: org.postgresql.Driver
-    url: ${HOMOLOG_DB_URL}
+    url: ${HOMOLOGDB_URL}
     username: ${HOMOLOG_DB_USERNAME}
     password: ${HOMOLOG_DB_PASSWORD}
   jpa:
     open-in-view: false
     hibernate:
-      ddl-auto: validate    # Mais seguro para homologação
-    properties:
-      hibernate:
-        format_sql: true
+      ddl-auto: update
   security:
     user:
       name: ${HOMOLOG_SECURITY_USER}
@@ -21,17 +18,3 @@ spring:
 
 server:
   port: ${HOMOLOG_SERVER_PORT}
-
-logging:
-  file:
-    name: ${LOGGING_FILE_NAME}
-    max-size: ${LOGGING_FILE_MAX_SIZE}
-    max-history: ${LOGGING_FILE_MAX_HISTORY}
-  level:
-    root: ${LOGGING_LEVEL_ROOT}
-    org.springframework: ${LOGGING_LEVEL_SPRING}
-    org.hibernate: ${LOGGING_LEVEL_HIBERNATE}
-    com.pizzaria: DEBUG    # Mais detalhado para homologação
-  pattern:
-    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
-    file: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"

@@ -33,3 +33,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
 
 # Comando para executar a aplicação
 ENTRYPOINT ["java", "-Dspring.profiles.active=dev", "-jar", "target/pizzaria-0.0.1-SNAPSHOT.jar"]
+#ENTRYPOINT ["java", "-Dspring.profiles.active=homolog", "-jar", "target/pizzaria-0.0.1-SNAPSHOT.jar"]
