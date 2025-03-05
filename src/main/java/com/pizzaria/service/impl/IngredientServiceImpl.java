@@ -3,6 +3,7 @@ package com.pizzaria.service.impl;
 import com.pizzaria.dto.request.IngredientRequest;
 import com.pizzaria.entity.Ingredient;
 import com.pizzaria.exception.BadRequestException;
+import com.pizzaria.exception.ResourceNotFoundException;
 import com.pizzaria.repository.IngredientRepository;
 import com.pizzaria.service.IngredientService;
 import lombok.RequiredArgsConstructor;
@@ -50,6 +51,54 @@ public class IngredientServiceImpl implements IngredientService {
     public List<Ingredient> getAllIngredients() {
         log.debug("Buscando todos os ingredientes - Cache MISS");
         return ingredientRepository.findAll();
+    }
+
+    @Cacheable(value = "ingredient", key = "#id")
+    public Ingredient getIngredientById(Long id) {
+        log.debug("Buscando ingrediente por ID: {} - Cache MISS", id);
+        return ingredientRepository.findById(id)
+                .orElseThrow(() -> {
+                    log.error("Ingrediente não encontrado. ID: {}", id);
+                    return new ResourceNotFoundException("Ingrediente não encontrado");
+                });
+    }
+
+    @Transactional
+    @CachePut(value = "ingredient", key = "#id")
+    public Ingredient updateIngredient(Long id, IngredientRequest request) {
+        log.info("Atualizando ingrediente. ID: {}", id);
+        validateIngredientRequest(request);
+
+        Ingredient ingredient = getIngredientById(id);
+        ingredient.setName(request.getName());
+        ingredient.setPrice(request.getPrice());
+
+        Ingredient updatedIngredient = ingredientRepository.save(ingredient);
+        log.info("Ingrediente atualizado com sucesso. ID: {}", id);
+
+        evictIngredientsCache();
+        return updatedIngredient;
+    }
+
+    @Cacheable(value = "availableIngredients")
+    public List<Ingredient> getAvailableIngredients() {
+        log.debug("Buscando ingredientes disponíveis - Cache MISS");
+        return ingredientRepository.findByAvailableTrue();
+    }
+
+    @Cacheable(value = "ingredients", key = "'search-' + #name + '-' + #maxPrice")
+    public List<Ingredient> searchIngredients(String name, BigDecimal maxPrice) {
+        log.debug("Buscando ingredientes com filtros - Cache MISS");
+        if (name != null && !name.isEmpty()) {
+            return ingredientRepository.findByNameContainingIgnoreCase(name);
+        }
+
+        if (maxPrice != null) {
+            validatePrice(maxPrice);
+            return ingredientRepository.findByPriceLessThanEqual(maxPrice);
+        }
+
+        return ingredientRepository.findByAvailableTrue();
     }
 
     private void validateIngredientRequest(IngredientRequest request) {
