@@ -5,6 +5,8 @@ import com.pizzaria.enums.PizzaSize;
 import lombok.Data;
 
 import java.math.BigDecimal;
+import java.util.HashSet;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -26,9 +28,15 @@ public class PizzaResponse {
         response.setPrice(pizza.getPrice());
         response.setSize(pizza.getSize());
         response.setActive(pizza.isActive());
-        response.setIngredients(pizza.getIngredients().stream()
-                .map(IngredientResponse::fromEntity)
-                .collect(Collectors.toSet()));
+
+        response.setIngredients(
+                Optional.ofNullable(pizza.getIngredients())
+                        .map(ings -> ings.stream()
+                                .map(IngredientResponse::fromEntity)
+                                .collect(Collectors.toSet()))
+                        .orElse(new HashSet<>())
+        );
         return response;
     }
+
 }

@@ -3,13 +3,17 @@ package com.pizzaria.entity;
 import com.pizzaria.enums.PizzaSize;
 import com.pizzaria.enums.ProductCategory;
 import jakarta.persistence.*;
-import lombok.Data;
+import lombok.Getter;
+import lombok.Setter;
+import lombok.ToString;
 
 import java.math.BigDecimal;
 import java.util.HashSet;
 import java.util.Set;
 
-@Data
+@Getter
+@Setter
+@ToString(exclude = "ingredients")
 @Entity
 @Table(name = "tb_pizzas")
 public class Pizza {
@@ -37,4 +41,17 @@ public class Pizza {
 
     @Enumerated(EnumType.STRING)
     private ProductCategory category;
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (!(o instanceof Pizza)) return false;
+        Pizza pizza = (Pizza) o;
+        return id != null && id.equals(pizza.id);
+    }
+
+    @Override
+    public int hashCode() {
+        return getClass().hashCode();
+    }
 }

@@ -56,7 +56,7 @@ public class PizzaServiceImpl implements PizzaService {
     @Cacheable(value = "pizzas")
     public List<Pizza> getAllPizzas() {
         log.debug("Buscando todas as pizzas - Cache MISS");
-        return pizzaRepository.findAll();
+        return pizzaRepository.findAllWithIngredients();
     }
 
     private void validatePizzaRequest(PizzaRequest request) {
