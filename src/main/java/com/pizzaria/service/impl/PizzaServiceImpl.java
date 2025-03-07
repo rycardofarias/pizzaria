@@ -3,6 +3,7 @@ package com.pizzaria.service.impl;
 import com.pizzaria.dto.request.PizzaRequest;
 import com.pizzaria.entity.Ingredient;
 import com.pizzaria.entity.Pizza;
+import com.pizzaria.enums.PizzaSize;
 import com.pizzaria.enums.ProductCategory;
 import com.pizzaria.exception.BadRequestException;
 import com.pizzaria.exception.ResourceNotFoundException;
@@ -11,6 +12,7 @@ import com.pizzaria.repository.PizzaRepository;
 import com.pizzaria.service.PizzaService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.CachePut;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
@@ -57,6 +59,66 @@ public class PizzaServiceImpl implements PizzaService {
     public List<Pizza> getAllPizzas() {
         log.debug("Buscando todas as pizzas - Cache MISS");
         return pizzaRepository.findAllWithIngredients();
+    }
+
+    @Cacheable(value = "pizza", key = "#id")
+    public Pizza getPizzaById(Long id) {
+        log.debug("Buscando pizza por ID: {} - Cache MISS", id);
+        return pizzaRepository.findById(id)
+                .orElseThrow(() -> {
+                    log.error("Pizza não encontrada. ID: {}", id);
+                    return new ResourceNotFoundException("Pizza não encontrada");
+                });
+    }
+
+    @Transactional
+    @CachePut(value = "pizza", key = "#id")
+    public Pizza updatePizza(Long id, PizzaRequest request) {
+        log.info("Atualizando pizza. ID: {}", id);
+        Pizza pizza = getPizzaById(id);
+
+        pizza.setName(request.getName());
+        pizza.setDescription(request.getDescription());
+        pizza.setSize(request.getSize());
+
+        Set<Ingredient> ingredients = getIngredientsFromIds(request.getIngredientIds());
+        pizza.setIngredients(ingredients);
+
+        BigDecimal price = calculatePizzaPrice(pizza);
+        pizza.setPrice(price);
+
+        Pizza updatedPizza = pizzaRepository.save(pizza);
+        log.info("Pizza atualizada com sucesso. ID: {}", id);
+        return updatedPizza;
+    }
+
+    @Transactional
+    @CacheEvict(value = {"pizza", "pizzas"}, allEntries = true)
+    public void deletePizza(Long id) {
+        log.info("Desativando pizza. ID: {}", id);
+        Pizza pizza = getPizzaById(id);
+        pizza.setActive(false);
+        pizzaRepository.save(pizza);
+        log.info("Pizza desativada com sucesso. ID: {}", id);
+    }
+
+    @Cacheable(value = "pizzas", key = "'search-' + #name + '-' + #size + '-' + #minPrice + '-' + #maxPrice")
+    public List<Pizza> searchPizzas(String name, PizzaSize size, BigDecimal minPrice, BigDecimal maxPrice) {
+        log.debug("Buscando pizzas com filtros - Cache MISS");
+
+        if (name != null && !name.isEmpty()) {
+            return pizzaRepository.findByNameContainingIgnoreCase(name);
+        }
+
+        if (size != null) {
+            return pizzaRepository.findBySize(size);
+        }
+
+        if (minPrice != null && maxPrice != null) {
+            return pizzaRepository.findByPriceBetween(minPrice, maxPrice);
+        }
+
+        return pizzaRepository.findAll();
     }
 
     private void validatePizzaRequest(PizzaRequest request) {
