@@ -20,6 +20,13 @@ public class GlobalExceptionHandler {
         return new ResponseEntity<>(error, HttpStatus.BAD_REQUEST);
     }
 
+    @ExceptionHandler(EmailSendingException.class)
+    public ResponseEntity<ErrorResponse> handleEmailSendingException(EmailSendingException ex) {
+    ErrorResponse error = new ErrorResponse( HttpStatus.INTERNAL_SERVER_ERROR.value(),
+        "Falha no envio de email: " + ex.getMessage());
+    return new ResponseEntity<>(error, HttpStatus.INTERNAL_SERVER_ERROR);
+}
+
     private static class ErrorResponse {
         private final int status;
         private final String message;

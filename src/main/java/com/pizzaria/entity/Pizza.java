@@ -3,9 +3,7 @@ package com.pizzaria.entity;
 import com.pizzaria.enums.PizzaSize;
 import com.pizzaria.enums.ProductCategory;
 import jakarta.persistence.*;
-import lombok.Getter;
-import lombok.Setter;
-import lombok.ToString;
+import lombok.*;
 
 import java.math.BigDecimal;
 import java.util.HashSet;
@@ -15,6 +13,8 @@ import java.util.Set;
 @Setter
 @ToString(exclude = "ingredients")
 @Entity
+@NoArgsConstructor
+@AllArgsConstructor
 @Table(name = "tb_pizzas")
 public class Pizza {
 
@@ -33,7 +33,7 @@ public class Pizza {
 
     @ManyToMany
     @JoinTable(
-            name = "pizza_ingredients",
+            name = "tb_pizza_ingredients",
             joinColumns = @JoinColumn(name = "pizza_id"),
             inverseJoinColumns = @JoinColumn(name = "ingredient_id")
     )

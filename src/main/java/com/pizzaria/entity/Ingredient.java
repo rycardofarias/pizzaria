@@ -4,9 +4,7 @@ import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
-import lombok.Getter;
-import lombok.Setter;
-import lombok.ToString;
+import lombok.*;
 
 import java.math.BigDecimal;
 import java.util.HashSet;
@@ -16,6 +14,8 @@ import java.util.Set;
 @Setter
 @ToString(exclude = "pizzas")
 @Entity
+@NoArgsConstructor
+@AllArgsConstructor
 @Table(name = "tb_ingredients")
 public class Ingredient {
 

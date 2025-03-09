@@ -26,3 +26,6 @@ spring:
 
 server:
   port: ${DEV_SERVER_PORT}
+
+app:
+  url: http://localhost:${DEV_SERVER_PORT}

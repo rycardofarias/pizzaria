@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>Confirmação de Email</title>
+</head>
+<body>
+    <h2>Confirmação de Email</h2>
+    <p>Bem-vindo! Para confirmar seu email, clique no link abaixo:</p>
+    <p>
+        <a th:href="${verificationUrl}" th:text="${verificationUrl}">Link de verificação</a>
+    </p>
+    <p>Este link é válido por 24 horas.</p>
+    <p>Se você não criou uma conta em nosso sistema, ignore este email.</p>
+</body>
+</html> 

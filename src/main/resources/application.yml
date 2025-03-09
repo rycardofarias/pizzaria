@@ -10,3 +10,15 @@ spring:
   jackson:
     time-zone: America/Sao_Paulo
     default-property-inclusion: non_null
+
+  mail:
+    host: sandbox.smtp.mailtrap.io
+    port: 2525
+    username: ${EMAIL_USERNAME}
+    password: ${EMAIL_PASSWORD_USERNAME}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true

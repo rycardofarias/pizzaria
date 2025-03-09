@@ -85,4 +85,3 @@ gradle/
 gradlew.bat
 .gitattributes
 .mvn
-.env
