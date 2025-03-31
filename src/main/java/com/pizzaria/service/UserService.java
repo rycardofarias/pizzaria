@@ -5,6 +5,8 @@ import com.pizzaria.dto.request.UserUpdateRequest;
 import com.pizzaria.entity.User;
 import jakarta.validation.Valid;
 
+import java.util.Optional;
+
 public interface UserService {
 
     User createUser(@Valid UserCreateRequest request);
@@ -19,4 +21,5 @@ public interface UserService {
 
     void deleteUser(Long id);
 
+    Optional<User> findByEmail(String email);
 }

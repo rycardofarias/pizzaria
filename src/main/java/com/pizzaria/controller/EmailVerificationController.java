@@ -9,7 +9,7 @@ import org.springframework.web.bind.annotation.*;
 
 @Slf4j
 @RestController
-@RequestMapping("/auth/email")
+@RequestMapping("/email")
 @RequiredArgsConstructor
 public class EmailVerificationController {
 

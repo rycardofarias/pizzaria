@@ -51,7 +51,7 @@ public class EmailServiceImpl implements EmailService {
         
         Context context = new Context();
         context.setVariable("verificationToken", token);
-        context.setVariable("verificationUrl", appBaseUrl + "/auth/email/verify-email?token=" + token);
+        context.setVariable("verificationUrl", appBaseUrl + "/email/verify-email?token=" + token);
         
         String emailContent = templateEngine.process("email-verification", context);
         

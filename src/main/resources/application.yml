@@ -22,3 +22,17 @@ spring:
           auth: true
           starttls:
             enable: true
+
+app:
+  jwt:
+    secret: "bG9yZW1pcHN1bS5kb2xvci4xMjM0NTY3ODkwISE="
+    expiration: 86400000
+jwt:
+  refresh:
+    expiration: 86400000
+
+logging:
+  level:
+    root:
+      org:
+        springframework: DEBUG

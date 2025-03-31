@@ -1,47 +1,95 @@
 package com.pizzaria.exception;
 
+import jakarta.validation.ConstraintViolationException;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.FieldError;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.context.request.WebRequest;
 
+import java.time.LocalDateTime;
+import java.util.HashMap;
+import java.util.Map;
+
+@Slf4j
 @ControllerAdvice
 public class GlobalExceptionHandler {
 
     @ExceptionHandler(ResourceNotFoundException.class)
-    public ResponseEntity<ErrorResponse> handleResourceNotFoundException(ResourceNotFoundException ex) {
-        ErrorResponse error = new ErrorResponse(HttpStatus.NOT_FOUND.value(), ex.getMessage());
-        return new ResponseEntity<>(error, HttpStatus.NOT_FOUND);
+    public ResponseEntity<ErrorResponse> handleResourceNotFoundException(ResourceNotFoundException ex, WebRequest request) {
+        ExceptionLogger.logWarn(HttpStatus.NOT_FOUND, ex.getMessage());
+        return buildResponse(HttpStatus.NOT_FOUND, ex.getMessage(), request);
     }
 
     @ExceptionHandler(BadRequestException.class)
-    public ResponseEntity<ErrorResponse> handleBadRequestException(BadRequestException ex) {
-        ErrorResponse error = new ErrorResponse(HttpStatus.BAD_REQUEST.value(), ex.getMessage());
-        return new ResponseEntity<>(error, HttpStatus.BAD_REQUEST);
+    public ResponseEntity<ErrorResponse> handleBadRequestException(BadRequestException ex, WebRequest request) {
+        ExceptionLogger.logWarn(HttpStatus.BAD_REQUEST, ex.getMessage());
+        return buildResponse(HttpStatus.BAD_REQUEST, ex.getMessage(), request);
     }
 
     @ExceptionHandler(EmailSendingException.class)
-    public ResponseEntity<ErrorResponse> handleEmailSendingException(EmailSendingException ex) {
-    ErrorResponse error = new ErrorResponse( HttpStatus.INTERNAL_SERVER_ERROR.value(),
-        "Falha no envio de email: " + ex.getMessage());
-    return new ResponseEntity<>(error, HttpStatus.INTERNAL_SERVER_ERROR);
-}
-
-    private static class ErrorResponse {
-        private final int status;
-        private final String message;
-
-        public ErrorResponse(int status, String message) {
-            this.status = status;
-            this.message = message;
-        }
-
-        public int getStatus() {
-            return status;
-        }
-
-        public String getMessage() {
-            return message;
-        }
+    public ResponseEntity<ErrorResponse> handleEmailSendingException(EmailSendingException ex, WebRequest request) {
+        ExceptionLogger.logError(HttpStatus.INTERNAL_SERVER_ERROR, "Erro ao enviar e-mail", ex);
+        return buildResponse(HttpStatus.INTERNAL_SERVER_ERROR, "Falha no envio de e-mail: " + ex.getMessage(), request);
     }
-} 
+
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<ErrorResponse> handleValidationExceptions(MethodArgumentNotValidException ex, WebRequest request) {
+        Map<String, String> errors = new HashMap<>();
+        for (FieldError error : ex.getBindingResult().getFieldErrors()) {
+            errors.put(error.getField(), error.getDefaultMessage());
+        }
+        ExceptionLogger.logValidationErrors(errors);
+        return buildResponse(HttpStatus.BAD_REQUEST, "Erro de validação nos campos", errors, request);
+    }
+
+    @ExceptionHandler(ConstraintViolationException.class)
+    public ResponseEntity<ErrorResponse> handleConstraintViolationException(ConstraintViolationException ex, WebRequest request) {
+        Map<String, String> errors = new HashMap<>();
+        ex.getConstraintViolations().forEach(violation ->
+                errors.put(violation.getPropertyPath().toString(), violation.getMessage()));
+
+        ExceptionLogger.logValidationErrors(errors);
+        return buildResponse(HttpStatus.BAD_REQUEST, "Erro de validação nos parâmetros", errors, request);
+    }
+
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<ErrorResponse> handleGenericException(Exception ex, WebRequest request) {
+        ExceptionLogger.logError(HttpStatus.INTERNAL_SERVER_ERROR, "Erro inesperado no sistema", ex);
+        return buildResponse(HttpStatus.INTERNAL_SERVER_ERROR, "Ocorreu um erro inesperado. Tente novamente mais tarde.", request);
+    }
+
+    private ResponseEntity<ErrorResponse> buildResponse(HttpStatus status, String message, WebRequest request) {
+        return buildResponse(status, message, null, request);
+    }
+
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ErrorResponse> handleDataIntegrityViolationException(DataIntegrityViolationException ex, WebRequest request) {
+        String errorMessage = "Token de atualização já existe para este usuário.";
+        ExceptionLogger.logError(HttpStatus.BAD_REQUEST, errorMessage, ex);
+        return buildResponse(HttpStatus.BAD_REQUEST, errorMessage, request);
+    }
+
+    private ResponseEntity<ErrorResponse> buildResponse(HttpStatus status, String message, Map<String, String> errors, WebRequest request) {
+        ErrorResponse errorResponse = new ErrorResponse(
+                status.value(),
+                message,
+                LocalDateTime.now(),
+                request.getDescription(false),
+                errors
+        );
+        return new ResponseEntity<>(errorResponse, status);
+    }
+
+    public record ErrorResponse(
+            int status,
+            String message,
+            LocalDateTime timestamp,
+            String path,
+            Map<String, String> validationErrors
+    ) { }
+}
