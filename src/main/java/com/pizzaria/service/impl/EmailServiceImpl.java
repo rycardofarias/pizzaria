@@ -71,4 +71,44 @@ public class EmailServiceImpl implements EmailService {
 
         return message;
     }
+
+    @Async
+    @Override
+    public void sendVerificationCode(String to, String code) {
+        try {
+            log.debug("Preparando email com código de verificação: {}", to);
+            MimeMessage message = createVerificationCodeEmail(to, code);
+
+            mailSender.send(message);
+            log.info("Email com código de verificação enviado: {}", to);
+        } catch (MessagingException e) {
+            log.error("Erro ao enviar email com código de verificação: {}", to, e);
+            throw new EmailSendingException("Não foi possível enviar o email com código de verificação");
+        }
+    }
+
+    private MimeMessage createVerificationCodeEmail(String to, String code) throws MessagingException {
+        MimeMessage message = mailSender.createMimeMessage();
+        MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+
+        try {
+            helper.setFrom(new InternetAddress(fromEmail, "Pizzaria", "UTF-8"));
+        } catch (UnsupportedEncodingException e) {
+            log.warn("Erro ao definir remetente personalizado", e);
+            helper.setFrom(fromEmail);
+        }
+
+        helper.setTo(to);
+        helper.setSubject("Código de Verificação - Pizzaria");
+
+        Context context = new Context();
+        context.setVariable("verificationCode", code);
+        context.setVariable("userName", to.split("@")[0]);
+        context.setVariable("expiryMinutes", 10);
+
+        String htmlContent = templateEngine.process("email-verification-code", context);
+        helper.setText(htmlContent, true);
+
+        return message;
+    }
 }

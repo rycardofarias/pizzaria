@@ -1,0 +1,97 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Código de Verificação - Pizzaria</title>
+</head>
+<body style="font-family: Arial, Helvetica, sans-serif; line-height: 1.6; color: #333333; background-color: #f9f9f9; margin: 0; padding: 0;">
+<!-- Main Table -->
+<table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f9f9f9;">
+    <tr>
+        <td align="center" style="padding: 20px 0;">
+            <!-- Content Table -->
+            <table border="0" cellpadding="0" cellspacing="0" width="600" style="background-color: #ffffff; border: 1px solid #dddddd;">
+                <!-- Header -->
+                <tr>
+                    <td align="center" bgcolor="#C62828" style="padding: 30px 20px;">
+                        <img src="/api/placeholder/150/60" alt="Logo da Pizzaria" width="150" style="display: block; margin-bottom: 15px;" />
+                        <h1 style="color: #ffffff; margin: 0; font-size: 24px; font-weight: 600;">Código de Verificação</h1>
+                    </td>
+                </tr>
+
+                <!-- Divider -->
+                <tr>
+                    <td bgcolor="#E53935" style="height: 5px; font-size: 0; line-height: 0;">&nbsp;</td>
+                </tr>
+
+                <!-- Content -->
+                <tr>
+                    <td style="padding: 40px 30px;">
+                        <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                            <tr>
+                                <td>
+                                    <h2 style="color: #D32F2F; font-size: 22px; margin-top: 0; margin-bottom: 20px;">Olá, <span th:text="${userName}">Cliente</span>!</h2>
+
+                                    <p style="margin-bottom: 24px; font-size: 16px;">Obrigado por se cadastrar na nossa pizzaria. Para garantir a segurança da sua conta, precisamos verificar seu endereço de email.</p>
+
+                                    <p style="margin-bottom: 24px; font-size: 16px;">Use o código abaixo para confirmar seu email:</p>
+
+                                    <!-- Verification Code Box -->
+                                    <div style="background-color: #f5f5f5; border: 1px dashed #D32F2F; border-radius: 6px; padding: 20px; text-align: center; margin: 30px 0;">
+                                        <span style="font-family: monospace; font-size: 32px; font-weight: bold; letter-spacing: 5px; color: #D32F2F;" th:text="${verificationCode}">123456</span>
+                                    </div>
+
+                                    <p style="margin-bottom: 24px; font-size: 16px;">Este código expira em <strong th:text="${expiryMinutes}">10</strong> minutos. Se você não solicitou este código, pode ignorar este email com segurança.</p>
+
+                                    <p style="margin-bottom: 24px; font-size: 16px;">Caso tenha alguma dúvida, entre em contato com nossa equipe de suporte.</p>
+
+                                    <p style="margin-bottom: 24px; font-size: 16px;">Buon appetito!<br />
+                                        <strong>Equipe da Pizzaria</strong></p>
+                                </td>
+                            </tr>
+                        </table>
+                    </td>
+                </tr>
+
+                <!-- Divider -->
+                <tr>
+                    <td bgcolor="#E53935" style="height: 5px; font-size: 0; line-height: 0;">&nbsp;</td>
+                </tr>
+
+                <!-- Footer -->
+                <tr>
+                    <td bgcolor="#FFEBEE" style="padding: 20px; text-align: center; font-size: 14px; color: #888888;">
+                        <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                            <tr>
+                                <td align="center" style="padding: 15px 0;">
+                                    <a href="https://facebook.com/suapizzaria" style="text-decoration: none; margin: 0 8px;">
+                                        <img src="/api/placeholder/24/24" alt="Facebook" width="24" height="24" style="display: inline-block;" />
+                                    </a>
+                                    <a href="https://instagram.com/suapizzaria" style="text-decoration: none; margin: 0 8px;">
+                                        <img src="/api/placeholder/24/24" alt="Instagram" width="24" height="24" style="display: inline-block;" />
+                                    </a>
+                                    <a href="https://linkedin.com/company/suapizzaria" style="text-decoration: none; margin: 0 8px;">
+                                        <img src="/api/placeholder/24/24" alt="LinkedIn" width="24" height="24" style="display: inline-block;" />
+                                    </a>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td align="center">
+                                    <p style="margin-bottom: 10px;">© 2025 Pizzaria Italiana. Todos os direitos reservados.</p>
+                                    <p style="margin-bottom: 10px;">Rua da Pizza, 123, Cidade, País</p>
+                                    <p style="margin-bottom: 10px;">
+                                        <a href="https://www.suapizzaria.com/privacidade" style="color: #D32F2F; text-decoration: underline;">Política de Privacidade</a> |
+                                        <a href="https://www.suapizzaria.com/termos" style="color: #D32F2F; text-decoration: underline;">Termos de Uso</a>
+                                    </p>
+                                </td>
+                            </tr>
+                        </table>
+                    </td>
+                </tr>
+            </table>
+        </td>
+    </tr>
+</table>
+</body>
+</html>

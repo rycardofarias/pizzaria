@@ -1,9 +1,13 @@
 package com.pizzaria.controller;
 
+import com.pizzaria.dto.request.EmailRequest;
+import com.pizzaria.dto.request.EmailVerificationRequest;
+import com.pizzaria.dto.response.ApiResponse;
 import com.pizzaria.service.UserService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -29,5 +33,17 @@ public class EmailVerificationController {
         log.info("Recebida solicitação para reenvio de email de verificação: {}", email);
         userService.resendVerificationEmail(email);
         return ResponseEntity.ok().build();
+    }
+
+    @PostMapping(value = "/verify-email-code", produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<?> verifyEmail(@Valid @RequestBody EmailVerificationRequest request) {
+        userService.verifyEmailWithCode(request.getEmail(), request.getCode());
+        return ResponseEntity.ok(new ApiResponse(true, "Email verificado com sucesso."));
+    }
+
+    @PostMapping(value = "/resend-verification-code", produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<?> resendVerificationCode(@Valid @RequestBody EmailRequest request) {
+        userService.resendVerificationCode(request.getEmail());
+        return ResponseEntity.ok(new ApiResponse(true, "Código de verificação reenviado com sucesso."));
     }
 } 

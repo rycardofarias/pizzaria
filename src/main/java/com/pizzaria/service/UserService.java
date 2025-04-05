@@ -22,4 +22,8 @@ public interface UserService {
     void deleteUser(Long id);
 
     Optional<User> findByEmail(String email);
+
+    void verifyEmailWithCode(String email, String code);
+
+    void resendVerificationCode(String email);
 }

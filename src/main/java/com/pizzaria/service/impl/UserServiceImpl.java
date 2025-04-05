@@ -17,9 +17,11 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -53,13 +55,19 @@ public class UserServiceImpl implements UserService {
         user.setActive(true);
         user.setEmailVerified(false);
 
-        String verificationToken = generateEmailVerificationToken();
-        user.setEmailVerificationToken(verificationToken);
-        user.setEmailVerificationTokenExpiry(LocalDateTime.now().plusHours(24));
+        //String verificationToken = generateEmailVerificationToken();
+        //user.setEmailVerificationToken(verificationToken);
+        //user.setEmailVerificationTokenExpiry(LocalDateTime.now().plusHours(24));
+        CodeGenerator generator = new CodeGenerator();
+        String verificationCode = generator.generateVerificationCode(6);
+        user.setEmailVerificationToken(verificationCode);
+        user.setEmailVerificationTokenExpiry(LocalDateTime.now().plusMinutes(10));
 
         User savedUser = userRepository.save(user);
 
-        emailService.sendVerificationEmail(user.getEmail(), verificationToken);
+        //emailService.sendVerificationEmail(user.getEmail(), verificationToken);
+        emailService.sendVerificationCode(user.getEmail(), verificationCode);
+
 
         log.info("Usuário criado com sucesso. ID: {}", savedUser.getId());
         return savedUser;
@@ -183,5 +191,82 @@ public class UserServiceImpl implements UserService {
 
     public Optional<User> findByEmail(String email) {
         return userRepository.findByEmail(email);
+    }
+
+    public class CodeGenerator {
+        private static final SecureRandom random = new SecureRandom();
+
+        public static String generateVerificationCode(int length) {
+            if (length <= 0) {
+                throw new IllegalArgumentException("O tamanho do código deve ser maior que zero.");
+            }
+            return random.ints(length, 0, 10)
+                    .mapToObj(String::valueOf)
+                    .collect(Collectors.joining());
+        }
+    }
+
+    @Transactional
+    public void verifyEmailWithCode(String email, String code) {
+        log.info("Verificando email com código");
+
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> {
+                    log.error("Usuário não encontrado: {}", email);
+                    throw new ResourceNotFoundException("Usuário não encontrado");
+                });
+
+        if (!user.getEmailVerificationToken().equals(code)) {
+            log.error("Código de verificação inválido para usuário: {}", email);
+            throw new BadRequestException("Código de verificação inválido");
+        }
+
+        if (user.getEmailVerificationTokenExpiry().isBefore(LocalDateTime.now())) {
+            log.error("Código de verificação expirado para usuário: {}", email);
+            throw new BadRequestException("Código de verificação expirado");
+        }
+
+        if (user.getPendingEmail() != null) {
+            log.info("Atualizando email de '{}' para '{}'", user.getEmail(), user.getPendingEmail());
+
+            user.setEmail(user.getPendingEmail());
+            user.setPendingEmail(null);
+        }
+
+        user.setEmailVerified(true);
+        user.setEmailVerificationToken(null);
+        user.setEmailVerificationTokenExpiry(null);
+        userRepository.save(user);
+
+        log.info("Email verificado com sucesso para usuário: {}", user.getEmail());
+    }
+
+    @Transactional
+    public void resendVerificationCode(String email) {
+        log.info("Reenviando código de verificação para: {}", email);
+
+        User user = userRepository.findByEmailOrPendingEmail(email, email)
+                .orElseThrow(() -> {
+                    log.error("Usuário não encontrado com o email: {}", email);
+                    throw new ResourceNotFoundException("Usuário não encontrado");
+                });
+
+        String targetEmail = email.equals(user.getEmail()) ? user.getEmail() : user.getPendingEmail();
+
+        if (user.isEmailVerified() && user.getPendingEmail() == null) {
+            log.error("Email já verificado para usuário: {}", email);
+            throw new BadRequestException("Email já verificado");
+        }
+
+        // Gerar novo código de verificação
+        CodeGenerator generator = new CodeGenerator();
+        String verificationCode = generator.generateVerificationCode(6);
+        user.setEmailVerificationToken(verificationCode);
+        // Código expira em 10 minutos
+        user.setEmailVerificationTokenExpiry(LocalDateTime.now().plusMinutes(10));
+        userRepository.save(user);
+
+        emailService.sendVerificationCode(targetEmail, verificationCode);
+        log.info("Código de verificação reenviado para: {}", targetEmail);
     }
 }
