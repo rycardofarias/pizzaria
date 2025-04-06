@@ -9,7 +9,6 @@ import com.pizzaria.exception.BadRequestException;
 import com.pizzaria.exception.ResourceNotFoundException;
 import com.pizzaria.repository.RoleRepository;
 import com.pizzaria.repository.UserRepository;
-import com.pizzaria.service.EmailService;
 import com.pizzaria.service.UserService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -17,117 +16,34 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.security.SecureRandom;
-import java.time.LocalDateTime;
 import java.util.Optional;
-import java.util.UUID;
-import java.util.stream.Collectors;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class UserServiceImpl implements UserService {
 
-    private final PasswordEncoder passwordEncoder;
     private final UserRepository userRepository;
-    private final EmailService emailService;
     private final RoleRepository roleRepository;
+    private final PasswordEncoder passwordEncoder;
+    private final EmailVerificationServiceImpl verificationService;
 
-
+    @Override
     @Transactional
     public User createUser(UserCreateRequest request) {
         log.info("Criando novo usuário: {}", request.getEmail());
+        validateEmailNotExists(request.getEmail());
 
-        if (userRepository.existsByEmail(request.getEmail())) {
-            log.error("Email já cadastrado: {}", request.getEmail());
-            throw new BadRequestException("Email já cadastrado");
-        }
-
-        User user = new User();
-        user.setName(request.getName());
-        user.setEmail(request.getEmail());
-        user.setPassword(passwordEncoder.encode(request.getPassword()));
-
-        Role userRole = roleRepository.findByName(RoleEnum.ROLE_USER.getValue())
-                .orElseThrow(() -> new RuntimeException("Role não encontrada"));
-        user.getRoles().add(userRole);
-
-        user.setActive(true);
-        user.setEmailVerified(false);
-
-        //String verificationToken = generateEmailVerificationToken();
-        //user.setEmailVerificationToken(verificationToken);
-        //user.setEmailVerificationTokenExpiry(LocalDateTime.now().plusHours(24));
-        CodeGenerator generator = new CodeGenerator();
-        String verificationCode = generator.generateVerificationCode(6);
-        user.setEmailVerificationToken(verificationCode);
-        user.setEmailVerificationTokenExpiry(LocalDateTime.now().plusMinutes(10));
-
+        User user = buildUserFromRequest(request);
         User savedUser = userRepository.save(user);
 
-        //emailService.sendVerificationEmail(user.getEmail(), verificationToken);
-        emailService.sendVerificationCode(user.getEmail(), verificationCode);
-
+        verificationService.initiateEmailVerification(savedUser);
 
         log.info("Usuário criado com sucesso. ID: {}", savedUser.getId());
         return savedUser;
     }
 
-    public void verifyEmail(String token) {
-        log.info("Verificando email com token");
-    
-        User user = userRepository.findByEmailVerificationToken(token)
-                .orElseThrow(() -> {
-                    log.error("Token de verificação de email inválido: {}", token);
-                    throw new BadRequestException("Token inválido");
-                });
-    
-        if (user.getEmailVerificationTokenExpiry().isBefore(LocalDateTime.now())) {
-            log.error("Token de verificação de email expirado para usuário: {}", user.getEmail());
-            throw new BadRequestException("Token expirado");
-        }
-    
-        if (user.getPendingEmail() != null) {
-            log.info("Atualizando email de '{}' para '{}'", user.getEmail(), user.getPendingEmail());
-            
-            user.setEmail(user.getPendingEmail());
-            user.setPendingEmail(null);
-        }
-        
-        user.setEmailVerified(true);
-        user.setEmailVerificationToken(null);
-        user.setEmailVerificationTokenExpiry(null);
-        userRepository.save(user);
-    
-        log.info("Email verificado com sucesso para usuário: {}", user.getEmail());
-    }
-
-    @Transactional
-    public void resendVerificationEmail(String email) {
-        log.info("Reenviando email de verificação para: {}", email);
-    
-        User user = userRepository.findByEmailOrPendingEmail(email, email)
-                .orElseThrow(() -> {
-                    log.error("Usuário não encontrado com o email: {}", email);
-                    throw new ResourceNotFoundException("Usuário não encontrado");
-                });
-    
-        String targetEmail = email.equals(user.getEmail()) ? user.getEmail() : user.getPendingEmail();
-    
-        if (user.isEmailVerified() && user.getPendingEmail() == null) {
-            log.error("Email já verificado para usuário: {}", email);
-            throw new BadRequestException("Email já verificado");
-        }
-    
-        String verificationToken = generateEmailVerificationToken();
-        user.setEmailVerificationToken(verificationToken);
-        user.setEmailVerificationTokenExpiry(LocalDateTime.now().plusHours(24));
-        userRepository.save(user);
-    
-        emailService.sendVerificationEmail(targetEmail, verificationToken);
-        log.info("Email de verificação reenviado para: {}", targetEmail);
-    }
-
+    @Override
     public User getUserById(Long id) {
         log.debug("Buscando usuário por ID: {}", id);
         return userRepository.findById(id)
@@ -137,45 +53,24 @@ public class UserServiceImpl implements UserService {
                 });
     }
 
+    @Override
     @Transactional
     public User updateUser(Long id, UserUpdateRequest request) {
         log.info("Atualizando usuário. ID: {}", id);
         User user = getUserById(id);
 
-        String verificationToken = null;
-
-        if (request.getName() != null) {
-            user.setName(request.getName());
-        }
-
-        if (request.getEmail() != null && !request.getEmail().equals(user.getEmail())) {
-            if (userRepository.existsByEmail(request.getEmail())) {
-                log.error("Email já está em uso: {}", request.getEmail());
-                throw new BadRequestException("Email já está em uso");
-            }
-
-            verificationToken = generateEmailVerificationToken();
-            user.setEmailVerificationToken(verificationToken);
-            user.setEmailVerificationTokenExpiry(LocalDateTime.now().plusHours(24));
-            
-            user.setPendingEmail(request.getEmail());
-            user.setEmailVerified(false); 
-        }
-
-        if (request.getPassword() != null) {
-            user.setPassword(passwordEncoder.encode(request.getPassword()));
-        }
-
+        boolean emailChanged = updateUserFields(user, request);
         User updatedUser = userRepository.save(user);
 
-        if (verificationToken != null) {
-            emailService.sendVerificationEmail(user.getPendingEmail(), verificationToken);
+        if (emailChanged) {
+            verificationService.initiateEmailChangeVerification(user);
         }
 
         log.info("Usuário atualizado com sucesso. ID: {}", id);
         return updatedUser;
     }
 
+    @Override
     @Transactional
     public void deleteUser(Long id) {
         log.info("Desativando usuário. ID: {}", id);
@@ -185,88 +80,52 @@ public class UserServiceImpl implements UserService {
         log.info("Usuário desativado com sucesso. ID: {}", id);
     }
 
-    private String generateEmailVerificationToken() {
-        return UUID.randomUUID().toString();
-    }
-
+    @Override
     public Optional<User> findByEmail(String email) {
         return userRepository.findByEmail(email);
     }
 
-    public class CodeGenerator {
-        private static final SecureRandom random = new SecureRandom();
+    // Métodos privados auxiliares
+    private User buildUserFromRequest(UserCreateRequest request) {
+        User user = new User();
+        user.setName(request.getName());
+        user.setEmail(request.getEmail());
+        user.setPassword(passwordEncoder.encode(request.getPassword()));
+        user.setActive(true);
+        user.setEmailVerified(false);
 
-        public static String generateVerificationCode(int length) {
-            if (length <= 0) {
-                throw new IllegalArgumentException("O tamanho do código deve ser maior que zero.");
-            }
-            return random.ints(length, 0, 10)
-                    .mapToObj(String::valueOf)
-                    .collect(Collectors.joining());
-        }
+        Role userRole = roleRepository.findByName(RoleEnum.ROLE_USER.getValue())
+                .orElseThrow(() -> new RuntimeException("Role não encontrada"));
+        user.getRoles().add(userRole);
+
+        return user;
     }
 
-    @Transactional
-    public void verifyEmailWithCode(String email, String code) {
-        log.info("Verificando email com código");
+    private boolean updateUserFields(User user, UserUpdateRequest request) {
+        boolean emailChanged = false;
 
-        User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> {
-                    log.error("Usuário não encontrado: {}", email);
-                    throw new ResourceNotFoundException("Usuário não encontrado");
-                });
-
-        if (!user.getEmailVerificationToken().equals(code)) {
-            log.error("Código de verificação inválido para usuário: {}", email);
-            throw new BadRequestException("Código de verificação inválido");
+        if (request.getName() != null) {
+            user.setName(request.getName());
         }
 
-        if (user.getEmailVerificationTokenExpiry().isBefore(LocalDateTime.now())) {
-            log.error("Código de verificação expirado para usuário: {}", email);
-            throw new BadRequestException("Código de verificação expirado");
+        if (request.getPassword() != null) {
+            user.setPassword(passwordEncoder.encode(request.getPassword()));
         }
 
-        if (user.getPendingEmail() != null) {
-            log.info("Atualizando email de '{}' para '{}'", user.getEmail(), user.getPendingEmail());
-
-            user.setEmail(user.getPendingEmail());
-            user.setPendingEmail(null);
+        if (request.getEmail() != null && !request.getEmail().equals(user.getEmail())) {
+            validateEmailNotExists(request.getEmail());
+            user.setPendingEmail(request.getEmail());
+            user.setEmailVerified(false);
+            emailChanged = true;
         }
 
-        user.setEmailVerified(true);
-        user.setEmailVerificationToken(null);
-        user.setEmailVerificationTokenExpiry(null);
-        userRepository.save(user);
-
-        log.info("Email verificado com sucesso para usuário: {}", user.getEmail());
+        return emailChanged;
     }
 
-    @Transactional
-    public void resendVerificationCode(String email) {
-        log.info("Reenviando código de verificação para: {}", email);
-
-        User user = userRepository.findByEmailOrPendingEmail(email, email)
-                .orElseThrow(() -> {
-                    log.error("Usuário não encontrado com o email: {}", email);
-                    throw new ResourceNotFoundException("Usuário não encontrado");
-                });
-
-        String targetEmail = email.equals(user.getEmail()) ? user.getEmail() : user.getPendingEmail();
-
-        if (user.isEmailVerified() && user.getPendingEmail() == null) {
-            log.error("Email já verificado para usuário: {}", email);
-            throw new BadRequestException("Email já verificado");
+    private void validateEmailNotExists(String email) {
+        if (userRepository.existsByEmail(email)) {
+            log.error("Email já cadastrado: {}", email);
+            throw new BadRequestException("Email já cadastrado");
         }
-
-        // Gerar novo código de verificação
-        CodeGenerator generator = new CodeGenerator();
-        String verificationCode = generator.generateVerificationCode(6);
-        user.setEmailVerificationToken(verificationCode);
-        // Código expira em 10 minutos
-        user.setEmailVerificationTokenExpiry(LocalDateTime.now().plusMinutes(10));
-        userRepository.save(user);
-
-        emailService.sendVerificationCode(targetEmail, verificationCode);
-        log.info("Código de verificação reenviado para: {}", targetEmail);
     }
 }

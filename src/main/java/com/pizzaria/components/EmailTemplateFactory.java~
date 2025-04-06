@@ -1,0 +1,39 @@
+package com.pizzaria.components;
+
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Component;
+
+@Component
+@RequiredArgsConstructor
+public class EmailTemplateFactory {
+
+    public Context createVerificationEmailContext(String email, String token, String appBaseUrl) {
+        Context context = new Context();
+
+        String verificationUrl = appBaseUrl + "/email/verify-email?token=" + token;
+        String userName = extractUserName(email);
+
+        context.setVariable("templateName", "email-verification");
+        context.setVariable("verificationUrl", verificationUrl);
+        context.setVariable("userName", userName);
+
+        return context;
+    }
+
+    public Context createVerificationCodeContext(String email, String code) {
+        Context context = new Context();
+
+        String userName = extractUserName(email);
+
+        context.setVariable("templateName", "email-verification-code");
+        context.setVariable("verificationCode", code);
+        context.setVariable("userName", userName);
+        context.setVariable("expiryMinutes", 10);
+
+        return context;
+    }
+
+    private String extractUserName(String email) {
+        return email.split("@")[0];
+    }
+}

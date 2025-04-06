@@ -10,10 +10,6 @@ import java.util.Optional;
 public interface UserService {
 
     User createUser(@Valid UserCreateRequest request);
-
-    void verifyEmail(String token);
-
-    void resendVerificationEmail(String email);
     
     User getUserById(Long id);
 
@@ -22,8 +18,4 @@ public interface UserService {
     void deleteUser(Long id);
 
     Optional<User> findByEmail(String email);
-
-    void verifyEmailWithCode(String email, String code);
-
-    void resendVerificationCode(String email);
 }

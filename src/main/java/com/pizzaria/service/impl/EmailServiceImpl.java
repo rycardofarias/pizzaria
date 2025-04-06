@@ -1,5 +1,6 @@
 package com.pizzaria.service.impl;
 
+import com.pizzaria.components.EmailTemplateFactory;
 import com.pizzaria.exception.EmailSendingException;
 import com.pizzaria.service.EmailService;
 import jakarta.mail.MessagingException;
@@ -24,9 +25,13 @@ public class EmailServiceImpl implements EmailService {
 
     private final JavaMailSender mailSender;
     private final TemplateEngine templateEngine;
+    private final EmailTemplateFactory templateFactory;
 
     @Value("${spring.mail.username}")
     private String fromEmail;
+
+    @Value("${app.mail.sender-name:Pizzaria}")
+    private String senderName;
 
     @Value("${app.url}")
     private String appBaseUrl;
@@ -34,81 +39,66 @@ public class EmailServiceImpl implements EmailService {
     @Async
     @Override
     public void sendVerificationEmail(String to, String token) {
+        log.debug("Preparando email de verificação: {}", to);
         try {
-            log.debug("Preparando email de verificação: {}", to);
-            MimeMessage message = createVerificationEmail(to, token);
+            MimeMessage message = createEmailFromTemplate(
+                    to,
+                    "Confirmação de Email - Pizzaria",
+                    templateFactory.createVerificationEmailContext(to, token, appBaseUrl)
+            );
 
             mailSender.send(message);
             log.info("Email de verificação enviado: {}", to);
         } catch (MessagingException e) {
-            log.error("Erro ao enviar email de verificação: {}", to, e);
-            throw new EmailSendingException("Não foi possível enviar o email de verificação");
+            handleEmailSendingError(to, e, "verificação");
         }
-    }
-
-    private MimeMessage createVerificationEmail(String to, String token) throws MessagingException {
-        MimeMessage message = mailSender.createMimeMessage();
-        MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
-
-        try {
-            helper.setFrom(new InternetAddress(fromEmail, "Pizzaria", "UTF-8"));
-        } catch (UnsupportedEncodingException e) {
-            log.warn("Erro ao definir remetente personalizado", e);
-            helper.setFrom(fromEmail);
-        }
-
-        helper.setTo(to);
-        helper.setSubject("Confirmação de Email - Pizzaria");
-
-        String verificationUrl = appBaseUrl + "/email/verify-email?token=" + token;
-
-        Context context = new Context();
-        context.setVariable("verificationUrl", verificationUrl);
-        context.setVariable("userName", to.split("@")[0]);
-
-        String htmlContent = templateEngine.process("email-verification", context);
-        helper.setText(htmlContent, true);
-
-        return message;
     }
 
     @Async
     @Override
     public void sendVerificationCode(String to, String code) {
+        log.debug("Preparando email com código de verificação: {}", to);
         try {
-            log.debug("Preparando email com código de verificação: {}", to);
-            MimeMessage message = createVerificationCodeEmail(to, code);
+            MimeMessage message = createEmailFromTemplate(
+                    to,
+                    "Código de Verificação - Pizzaria",
+                    templateFactory.createVerificationCodeContext(to, code)
+            );
 
             mailSender.send(message);
             log.info("Email com código de verificação enviado: {}", to);
         } catch (MessagingException e) {
-            log.error("Erro ao enviar email com código de verificação: {}", to, e);
-            throw new EmailSendingException("Não foi possível enviar o email com código de verificação");
+            handleEmailSendingError(to, e, "código de verificação");
         }
     }
 
-    private MimeMessage createVerificationCodeEmail(String to, String code) throws MessagingException {
+    // Métodos privados auxiliares
+    private MimeMessage createEmailFromTemplate(String to, String subject, Context context) throws MessagingException {
         MimeMessage message = mailSender.createMimeMessage();
         MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
 
+        setEmailSender(helper);
+        helper.setTo(to);
+        helper.setSubject(subject);
+
+        String templateName = context.getVariable("templateName").toString();
+        String htmlContent = templateEngine.process(templateName, context);
+        helper.setText(htmlContent, true);
+
+        return message;
+    }
+
+    private void setEmailSender(MimeMessageHelper helper) throws MessagingException {
         try {
-            helper.setFrom(new InternetAddress(fromEmail, "Pizzaria", "UTF-8"));
+            helper.setFrom(new InternetAddress(fromEmail, senderName, "UTF-8"));
         } catch (UnsupportedEncodingException e) {
             log.warn("Erro ao definir remetente personalizado", e);
             helper.setFrom(fromEmail);
         }
+    }
 
-        helper.setTo(to);
-        helper.setSubject("Código de Verificação - Pizzaria");
-
-        Context context = new Context();
-        context.setVariable("verificationCode", code);
-        context.setVariable("userName", to.split("@")[0]);
-        context.setVariable("expiryMinutes", 10);
-
-        String htmlContent = templateEngine.process("email-verification-code", context);
-        helper.setText(htmlContent, true);
-
-        return message;
+    private void handleEmailSendingError(String to, Exception e, String emailType) {
+        log.error("Erro ao enviar email de {}: {}", emailType, to, e);
+        throw new EmailSendingException("Não foi possível enviar o email de " + emailType);
     }
 }
