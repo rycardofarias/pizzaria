@@ -21,6 +21,24 @@ public class EmailTemplateFactory {
         return context;
     }
 
+    public Context createAlertEmailContext(String email, String body) {
+        Context context = new Context();
+        String userName = extractUserName(email);
+        context.setVariable("templateName", "email-alert");
+        context.setVariable("body", body);
+        context.setVariable("userName", userName);
+        return context;
+    }
+
+    public Context createAccountLockedEmailContext(String email, String body) {
+        Context context = new Context();
+        String userName = extractUserName(email);
+        context.setVariable("templateName", "email-account-locked");
+        context.setVariable("body", body);
+        context.setVariable("userName", userName);
+        return context;
+    }
+
     public Context createVerificationCodeContext(String email, String code) {
         Context context = new Context();
 

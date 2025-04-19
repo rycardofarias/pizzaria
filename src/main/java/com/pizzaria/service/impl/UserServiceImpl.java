@@ -128,4 +128,10 @@ public class UserServiceImpl implements UserService {
             throw new BadRequestException("Email já cadastrado");
         }
     }
+
+    @Override
+    @Transactional
+    public User saveUser(User user) {
+        return userRepository.save(user);
+    }
 }

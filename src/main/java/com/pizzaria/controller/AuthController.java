@@ -27,11 +27,12 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.web.bind.annotation.*;
+import jakarta.servlet.http.HttpServletRequest;
 
 @Slf4j
+@RequiredArgsConstructor
 @RestController
 @RequestMapping("/api/auth")
-@RequiredArgsConstructor
 public class AuthController {
 
     private final AuthenticationManager authenticationManager;
@@ -40,12 +41,43 @@ public class AuthController {
     private final RefreshTokenService refreshTokenService;
     private final AuthService authService;
 
+    private String getIpHeadersRaw(HttpServletRequest request) {
+        StringBuilder sb = new StringBuilder();
+        String xfHeader = request.getHeader("X-Forwarded-For");
+        String realIp = request.getHeader("X-Real-IP");
+        sb.append("X-Forwarded-For: ").append(xfHeader != null ? xfHeader : "").append("; ");
+        sb.append("X-Real-IP: ").append(realIp != null ? realIp : "");
+        return sb.toString();
+    }
+
+    private String extractClientIp(HttpServletRequest request) {
+        String xfHeader = request.getHeader("X-Forwarded-For");
+        if (xfHeader != null && !xfHeader.isBlank()) {
+            String[] ips = xfHeader.split(",");
+            for (String ip : ips) {
+                ip = ip.trim();
+                if (!ip.isEmpty() && !ip.equalsIgnoreCase("unknown")) {
+                    return ip;
+                }
+            }
+        }
+        String realIp = request.getHeader("X-Real-IP");
+        if (realIp != null && !realIp.isBlank() && !realIp.equalsIgnoreCase("unknown")) {
+            return realIp;
+        }
+        return request.getRemoteAddr();
+    }
+
     @PostMapping("/login")
     @Timed
-    public ResponseEntity<JwtResponse> login(@Valid @RequestBody LoginRequest request) {
-        log.info("Tentativa de login para o usuário: {}", request.getEmail());
-
+    public ResponseEntity<JwtResponse> login(@Valid @RequestBody LoginRequest request, HttpServletRequest servletRequest) {
+        log.info("Tentativa de login para o usuário: {} | Thread: {} | Timestamp: {}", request.getEmail(), Thread.currentThread().getId(), System.currentTimeMillis());
+        String clientIp = extractClientIp(servletRequest);
+        String ipHeaders = getIpHeadersRaw(servletRequest);
         try {
+            // Chama o controle de tentativas e alerta
+            authService.validateLoginAttempt(request.getEmail(), clientIp, ipHeaders);
+
             Authentication authentication = authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword())
             );
@@ -62,7 +94,7 @@ public class AuthController {
             String jwt = tokenProvider.generateToken(authentication);
             String refreshToken = refreshTokenService.createRefreshToken(userDetails.getUser()).getToken();
 
-            authService.loginSuccess(request.getEmail());
+            authService.loginSuccess(request.getEmail(), clientIp);
             log.info("Login realizado com sucesso para usuário: {}", request.getEmail());
 
             return ResponseEntity.ok(new JwtResponse(jwt, refreshToken));

@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>Alerta de Segurança</title>
+</head>
+<body style="font-family: Arial, sans-serif; background: #fafafa; padding: 20px;">
+    <div style="max-width: 600px; margin: auto; background: #fff; border-radius: 8px; box-shadow: 0 2px 8px #ececec; padding: 24px;">
+        <h2 style="color: #d32f2f;">Alerta de Segurança Detectado</h2>
+        <p>Olá <strong th:text="${userName}">usuário</strong>,</p>
+        <p style="color: #333;">Recebemos um evento de segurança no sistema:</p>
+        <pre style="background: #f8d7da; color: #721c24; padding: 12px; border-radius: 4px;">[[${body}]]</pre>
+        <p style="margin-top: 32px; color: #888; font-size: 0.95em;">Se você não reconhece esta atividade, por favor, entre em contato com o suporte imediatamente.</p>
+        <p style="color: #888; font-size: 0.9em;">Atenciosamente,<br/>Equipe Pizzaria</p>
+    </div>
+</body>
+</html>

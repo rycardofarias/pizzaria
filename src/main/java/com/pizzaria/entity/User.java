@@ -75,6 +75,13 @@ public class User {
     private LocalDateTime emailVerificationTokenExpiry;
 
     private String pendingEmail;
+
+    @Column(name = "failed_attempts", nullable = false, columnDefinition = "integer default 0")
+    @Builder.Default
+    private int failedAttempts = 0;
+
+    @Column(name = "lockout_time")
+    private LocalDateTime lockoutTime;
     
     @PrePersist
     protected void onCreate() {

@@ -56,6 +56,41 @@ public class EmailServiceImpl implements EmailService {
 
     @Async
     @Override
+    public void sendAlertEmail(String to, String body) {
+        log.debug("Enviando alerta via email: {}", to);
+        try {
+            MimeMessage message = createEmailFromTemplate(
+                    to,
+                    "Alerta",
+                    templateFactory.createAlertEmailContext(to, body)
+            );
+
+            mailSender.send(message);
+            log.info("Email de alerta enviado: {}", to);
+        } catch (MessagingException e) {
+            handleEmailSendingError(to, e, "alerta");
+        }
+    }
+
+    public void sendAccountLockedEmail(String to, String body) {
+        log.debug("Enviando email de conta bloqueada: {}", to);
+        try {
+            MimeMessage message = createEmailFromTemplate(
+                    to,
+                    "Conta Bloqueada - Alerta de Segurança",
+                    templateFactory.createAccountLockedEmailContext(to, body)
+            );
+
+            mailSender.send(message);
+            log.info("Email de conta bloqueada enviado: {}", to);
+        } catch (MessagingException e) {
+            handleEmailSendingError(to, e, "conta bloqueada");
+        }
+    }
+
+
+    @Async
+    @Override
     public void sendVerificationCode(String to, String code) {
         log.debug("Preparando email com código de verificação: {}", to);
         try {

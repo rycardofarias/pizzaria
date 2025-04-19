@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>Conta Bloqueada - Alerta de Segurança</title>
+</head>
+<body style="font-family: Arial, sans-serif; background: #fafafa; padding: 20px;">
+    <div style="max-width: 600px; margin: auto; background: #fff; border-radius: 8px; box-shadow: 0 2px 8px #ececec; padding: 24px;">
+        <div style="text-align: center; margin-bottom: 20px;">
+            <span style="font-size: 54px; color: #d32f2f;">&#9888;</span>
+        </div>
+        <h2 style="color: #d32f2f; text-align: center;">Sua Conta Foi Bloqueada</h2>
+        <p style="font-size: 1.1em; color: #222;">Olá <strong th:text="${userName}">usuário</strong>,</p>
+        <p style="color: #333; font-size: 1.05em;">Detectamos <strong>múltiplas tentativas de acesso com senha incorreta</strong> em sua conta e, por segurança, ela foi temporariamente <b>bloqueada</b>.</p>
+        <div style="background: #f8d7da; color: #721c24; padding: 16px; border-radius: 6px; margin: 18px 0; font-size: 1.05em;">
+            <b>Detalhes do evento:</b>
+            <br/>
+            <span style="white-space: pre-line;">[[${body}]]</span>
+        </div>
+        <p style="color: #b71c1c; font-size: 1em; font-weight: bold; margin-top: 18px;">Se você não reconhece esta atividade, altere sua senha imediatamente ou entre em contato com o suporte.</p>
+        <p style="color: #888; font-size: 0.9em; margin-top: 32px;">Atenciosamente,<br/>Equipe Pizzaria</p>
+    </div>
+</body>
+</html>

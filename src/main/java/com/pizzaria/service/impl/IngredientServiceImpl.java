@@ -1,5 +1,6 @@
 package com.pizzaria.service.impl;
 
+import com.pizzaria.interfaces.Auditable;
 import com.pizzaria.dto.request.IngredientRequest;
 import com.pizzaria.entity.Ingredient;
 import com.pizzaria.exception.BadRequestException;
@@ -26,6 +27,7 @@ public class IngredientServiceImpl implements IngredientService {
 
     @Transactional
     @CachePut(value = "ingredient", key = "#result.id")
+    @Auditable(action = "CREATE", entity = "Ingredient")
     public Ingredient createIngredient(IngredientRequest request) {
         log.info("Criando novo ingrediente: {}", request.getName());
         validateIngredientRequest(request);

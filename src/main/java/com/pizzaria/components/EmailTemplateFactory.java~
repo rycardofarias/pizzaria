@@ -2,6 +2,7 @@ package com.pizzaria.components;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
+import org.thymeleaf.context.Context;
 
 @Component
 @RequiredArgsConstructor
@@ -17,6 +18,16 @@ public class EmailTemplateFactory {
         context.setVariable("verificationUrl", verificationUrl);
         context.setVariable("userName", userName);
 
+        return context;
+    }
+
+    public Context createAlertEmailContext(String email, String body) {
+        Context context = new Context();
+
+        String userName = extractUserName(email);
+
+        context.setVariable("userName", userName);
+        context.setVariable("verificationUrl", body);
         return context;
     }
 

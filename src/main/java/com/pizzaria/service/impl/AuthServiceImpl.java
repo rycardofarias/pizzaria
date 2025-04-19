@@ -1,62 +1,169 @@
 package com.pizzaria.service.impl;
 
+import com.pizzaria.components.SecurityEventNotifier;
+import com.pizzaria.enums.SecurityEventType;
+import com.pizzaria.service.AuditService;
 import com.pizzaria.service.AuthService;
 import io.micrometer.core.annotation.Timed;
 import io.micrometer.core.instrument.MeterRegistry;
-import lombok.RequiredArgsConstructor;
+
 import lombok.extern.slf4j.Slf4j;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.authentication.LockedException;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.Optional;
 
+import com.pizzaria.entity.LoginAttempt;
+import com.pizzaria.entity.User;
+import com.pizzaria.repository.LoginAttemptRepository;
+import com.pizzaria.repository.UserRepository;
+
+import lombok.RequiredArgsConstructor;
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class AuthServiceImpl implements AuthService {
     
-    private final MeterRegistry meterRegistry;
-    private final ConcurrentHashMap<String, AtomicInteger> loginAttempts = new ConcurrentHashMap<>();
-    private final ConcurrentHashMap<String, LocalDateTime> lockoutTimes = new ConcurrentHashMap<>();
-    
-    private static final int MAX_LOGIN_ATTEMPTS = 5;
-    private static final int LOCKOUT_DURATION_MINUTES = 15;
+    @Autowired
+    private MeterRegistry meterRegistry;
+    @Autowired
+    private AuditService auditService; // Proteção força bruta
+    @Autowired
+    private SecurityEventNotifier securityEventNotifier;
+    @Autowired
+    private LoginAttemptRepository loginAttemptRepository;
+    @Autowired
+    private UserRepository userRepository;
+
+    @Value("${auth.max-login-attempts:5}")
+    private int maxLoginAttempts;
+
+    @Value("${auth.lockout-duration-minutes:15}")
+    private int lockoutDurationMinutes;
+
 
     @Timed
-    public void validateLoginAttempt(String email) {
+    public void validateLoginAttempt(String email, String ipAddress, String ipHeaders) {
+        log.info("[DEBUG] validateLoginAttempt chamado para: {}", email);
         meterRegistry.counter("auth.login.attempts.total").increment();
-        
-        if (isUserLockedOut(email)) {
+
+        Optional<User> userOpt = userRepository.findByEmail(email);
+        User user = userOpt.orElse(null);
+
+        // Sempre registra a tentativa, mesmo se bloqueado
+        LoginAttempt attempt = LoginAttempt.builder()
+            .email(email)
+            .success(false)
+            .ipAddress(ipAddress)
+            .ipHeaders(ipHeaders)
+            .attemptTime(LocalDateTime.now())
+            .user(user)
+            .build();
+        loginAttemptRepository.save(attempt);
+
+        // Auditoria de tentativa durante bloqueio
+        if (user != null && user.getLockoutTime() != null &&
+            user.getLockoutTime().plusMinutes(lockoutDurationMinutes).isAfter(LocalDateTime.now())) {
+            log.warn("Usuário {} tentou logar, mas a conta está bloqueada até {}.", email, user.getLockoutTime().plusMinutes(lockoutDurationMinutes));
             meterRegistry.counter("auth.login.attempts.locked").increment();
-            throw new LockedException("Conta bloqueada. Tente novamente em " + LOCKOUT_DURATION_MINUTES + " minutos");
+            try {
+                auditService.logEvent(
+                    email,
+                    user.getId() != null ? user.getId().toString() : email,
+                    "LOGIN_BLOCKED",
+                    "User",
+                    user.getId() != null ? user.getId().toString() : null,
+                    null,
+                    null,
+                    ipAddress,
+                    "Tentativa de login durante bloqueio",
+                    "FALHA",
+                    "Authentication"
+                );
+            } catch (Exception e) {
+                log.error("Erro ao registrar tentativa de login bloqueado na auditoria para {}", email, e);
+            }
+            throw new LockedException("Conta bloqueada. Tente novamente em " + lockoutDurationMinutes + " minutos");
         }
 
-        AtomicInteger attempts = loginAttempts.computeIfAbsent(email, k -> new AtomicInteger(0));
-        if (attempts.incrementAndGet() >= MAX_LOGIN_ATTEMPTS) {
-            lockoutTimes.put(email, LocalDateTime.now());
+        // Conta tentativas nos últimos X minutos
+        LocalDateTime since = LocalDateTime.now().minusMinutes(lockoutDurationMinutes);
+        int failedAttempts = loginAttemptRepository.countFailedAttempts(email, since);
+        log.info("[DEBUG] Tentativas atuais para {}: {}", email, failedAttempts);
+
+        // Alerta de segurança ao atingir 3 tentativas
+        if (failedAttempts == 3) {
+            try {
+                log.info("Enviando alerta de segurança para o usuário {} após 3 tentativas inválidas.", email);
+                securityEventNotifier.notify(
+                    SecurityEventType.LOGIN_FAIL,
+                    "Usuário: " + email + " realizou 3 tentativas de senha incorreta."
+                );
+            } catch (Exception e) {
+                log.error("Erro ao enviar alerta de segurança após 3 tentativas de login para {}", email, e);
+            }
+        }
+
+        // Bloqueia usuário se exceder limite
+        if (failedAttempts >= maxLoginAttempts && user != null) {
+            user.setLockoutTime(LocalDateTime.now());
+            user.setFailedAttempts(failedAttempts);
+            userRepository.save(user);
             meterRegistry.counter("auth.login.attempts.maxed").increment();
-            throw new LockedException("Número máximo de tentativas excedido. Conta bloqueada por " + LOCKOUT_DURATION_MINUTES + " minutos");
+            String details = "Muitas falhas de login para o usuário: " + email + " (" + failedAttempts + " tentativas)";
+            try {
+                log.info("Enviando email de conta bloqueada para {} e administrador.", email);
+                securityEventNotifier.notifyAccountLocked(email, details);
+            } catch (Exception e) {
+                log.error("Erro ao enviar email de conta bloqueada para {}", email, e);
+            }
+            try {
+                log.info("Registrando evento de auditoria de bloqueio para {}.", email);
+                auditService.logEvent(
+                    email,
+                    user != null && user.getId() != null ? user.getId().toString() : email,
+                    "LOGIN_FAIL",
+                    "User",
+                    user != null && user.getId() != null ? user.getId().toString() : null,
+                    null,
+                    null,
+                    ipAddress,
+                    details,
+                    "FALHA",
+                    "Authentication"
+                );
+            } catch (Exception e) {
+                log.error("Erro ao registrar alerta de múltiplas falhas de login na auditoria para {}", email, e);
+            }
+            throw new LockedException("Número máximo de tentativas excedido. Conta bloqueada por " + lockoutDurationMinutes + " minutos");
         }
     }
+    
 
     @Timed
-    public void loginSuccess(String email) {
-        loginAttempts.remove(email);
-        lockoutTimes.remove(email);
+    public void loginSuccess(String email, String ipAddress) {
+        log.debug("[loginSuccess] Chamado para: {}", email);
+        log.info("Login bem-sucedido para {}. Resetando tentativas e desbloqueando conta, se necessário.", email);
+        Optional<User> userOpt = userRepository.findByEmail(email);
+        if (userOpt.isPresent()) {
+            User user = userOpt.get();
+            user.setFailedAttempts(0);
+            user.setLockoutTime(null);
+            userRepository.save(user);
+        }
         meterRegistry.counter("auth.login.success.total").increment();
     }
 
     public boolean isUserLockedOut(String email) {
-        LocalDateTime lockoutTime = lockoutTimes.get(email);
-        if (lockoutTime != null) {
-            if (lockoutTime.plusMinutes(LOCKOUT_DURATION_MINUTES).isAfter(LocalDateTime.now())) {
+        Optional<User> userOpt = userRepository.findByEmail(email);
+        if (userOpt.isPresent()) {
+            User user = userOpt.get();
+            if (user.getLockoutTime() != null && user.getLockoutTime().plusMinutes(lockoutDurationMinutes).isAfter(LocalDateTime.now())) {
+                log.debug("Conta do usuário {} está bloqueada até {}.", email, user.getLockoutTime().plusMinutes(lockoutDurationMinutes));
                 return true;
-            } else {
-                // Lockout period expired
-                loginAttempts.remove(email);
-                lockoutTimes.remove(email);
             }
         }
         return false;
