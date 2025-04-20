@@ -1,14 +1,16 @@
 package com.pizzaria.service;
 
 public interface AuthService {
+    void auditLogout(String email, String ipAddress);
+    void auditRefreshToken(String email, String ipAddress);
+    void auditRegister(String email, String ipAddress);
     void loginSuccess(String email, String ipAddress);
 
-    public void validateLoginAttempt(String email, String ipAddress, String ipHeaders);
+    void validateLoginAttempt(String email, String ipAddress, String ipHeaders);
 
     boolean isUserLockedOut(String email);
 
     void validateRefreshTokenAttempt(String token);
-
 
     void refreshTokenSuccess();
 }

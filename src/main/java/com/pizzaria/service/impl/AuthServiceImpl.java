@@ -153,8 +153,91 @@ public class AuthServiceImpl implements AuthService {
             user.setFailedAttempts(0);
             user.setLockoutTime(null);
             userRepository.save(user);
+            try {
+                auditService.logEvent(
+                    email,
+                    user.getId() != null ? user.getId().toString() : email,
+                    "LOGIN_SUCCESS",
+                    "User",
+                    user.getId() != null ? user.getId().toString() : null,
+                    null,
+                    null,
+                    ipAddress,
+                    "Login successful",
+                    "SUCESSO",
+                    "Authentication"
+                );
+            } catch (Exception e) {
+                log.error("Erro ao registrar evento de login bem-sucedido na auditoria para {}", email, e);
+            }
         }
         meterRegistry.counter("auth.login.success.total").increment();
+    }
+
+    public void auditLogout(String email, String ipAddress) {
+        try {
+            Optional<User> userOpt = userRepository.findByEmail(email);
+            User user = userOpt.orElse(null);
+            auditService.logEvent(
+                email,
+                user != null && user.getId() != null ? user.getId().toString() : email,
+                "LOGOUT",
+                "User",
+                user != null && user.getId() != null ? user.getId().toString() : null,
+                null,
+                null,
+                ipAddress,
+                "Logout successful",
+                "SUCESSO",
+                "Authentication"
+            );
+        } catch (Exception e) {
+            log.error("Erro ao registrar evento de logout na auditoria para {}", email, e);
+        }
+    }
+
+    public void auditRefreshToken(String email, String ipAddress) {
+        try {
+            Optional<User> userOpt = userRepository.findByEmail(email);
+            User user = userOpt.orElse(null);
+            auditService.logEvent(
+                email,
+                user != null && user.getId() != null ? user.getId().toString() : email,
+                "REFRESH_TOKEN",
+                "User",
+                user != null && user.getId() != null ? user.getId().toString() : null,
+                null,
+                null,
+                ipAddress,
+                "Refresh token successful",
+                "SUCESSO",
+                "Authentication"
+            );
+        } catch (Exception e) {
+            log.error("Erro ao registrar evento de refresh token na auditoria para {}", email, e);
+        }
+    }
+
+    public void auditRegister(String email, String ipAddress) {
+        try {
+            Optional<User> userOpt = userRepository.findByEmail(email);
+            User user = userOpt.orElse(null);
+            auditService.logEvent(
+                email,
+                user != null && user.getId() != null ? user.getId().toString() : email,
+                "REGISTER",
+                "User",
+                user != null && user.getId() != null ? user.getId().toString() : null,
+                null,
+                null,
+                ipAddress,
+                "User registration successful",
+                "SUCESSO",
+                "Authentication"
+            );
+        } catch (Exception e) {
+            log.error("Erro ao registrar evento de registro na auditoria para {}", email, e);
+        }
     }
 
     public boolean isUserLockedOut(String email) {

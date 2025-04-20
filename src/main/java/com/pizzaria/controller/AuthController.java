@@ -110,7 +110,7 @@ public class AuthController {
 
     @PostMapping("/refresh")
     @Timed(value = "auth.refresh.endpoint", description = "Time taken to process token refresh")
-    public ResponseEntity<TokenRefreshResponse> refreshToken(@Valid @RequestBody TokenRefreshRequest request) {
+    public ResponseEntity<TokenRefreshResponse> refreshToken(@Valid @RequestBody TokenRefreshRequest request, HttpServletRequest servletRequest) {
         log.info("Tentativa de refresh token");
 
         try {
@@ -123,6 +123,8 @@ public class AuthController {
             String token = tokenProvider.generateTokenFromUser(user);
 
             authService.refreshTokenSuccess();
+            String ipAddress = extractClientIp(servletRequest);
+            authService.auditRefreshToken(user.getEmail(), ipAddress);
             log.info("Token renovado com sucesso para usuário: {}", user.getEmail());
 
             return ResponseEntity.ok(new TokenRefreshResponse(token, request.getRefreshToken()));
@@ -133,7 +135,7 @@ public class AuthController {
     }
 
     @PostMapping("/logout")
-    public ResponseEntity<Void> logout(@RequestHeader("Authorization") String token) {
+    public ResponseEntity<Void> logout(@RequestHeader("Authorization") String token, HttpServletRequest servletRequest) {
         log.info("Tentativa de logout");
 
         String jwt = token.substring(7);
@@ -143,15 +145,21 @@ public class AuthController {
 
         refreshTokenService.deleteByUserId(user.getId());
 
+        String ipAddress = extractClientIp(servletRequest);
+        authService.auditLogout(user.getEmail(), ipAddress);
+
         log.info("Logout realizado com sucesso");
         return ResponseEntity.ok().build();
     }
 
     @PostMapping("/register")
-    public ResponseEntity<UserResponse> register(@Valid @RequestBody UserCreateRequest request) {
+    public ResponseEntity<UserResponse> register(@Valid @RequestBody UserCreateRequest request, HttpServletRequest servletRequest) {
         log.info("Tentativa de registro para usuário: {}", request.getEmail());
 
         User user = userService.createUser(request);
+
+        String ipAddress = extractClientIp(servletRequest);
+        authService.auditRegister(user.getEmail(), ipAddress);
 
         log.info("Usuário registrado com sucesso: {}", request.getEmail());
         return ResponseEntity.ok(UserResponse.fromEntity(user));
