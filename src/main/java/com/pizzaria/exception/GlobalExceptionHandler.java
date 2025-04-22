@@ -22,7 +22,25 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(ResourceNotFoundException.class)
     public ResponseEntity<ErrorResponse> handleResourceNotFoundException(ResourceNotFoundException ex, WebRequest request) {
         ExceptionLogger.logWarn(HttpStatus.NOT_FOUND, ex.getMessage());
-        return buildResponse(HttpStatus.NOT_FOUND, ex.getMessage(), request);
+        return buildResponse(HttpStatus.NOT_FOUND, "Recurso não encontrado.", request);
+    }
+
+    @ExceptionHandler(org.springframework.security.core.userdetails.UsernameNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleUsernameNotFound(org.springframework.security.core.userdetails.UsernameNotFoundException ex, WebRequest request) {
+        log.warn("Tentativa de acesso com usuário inexistente: {}", ex.getMessage());
+        return buildResponse(HttpStatus.UNAUTHORIZED, "Usuário ou senha inválidos.", request);
+    }
+
+    @ExceptionHandler(com.pizzaria.exception.TokenRefreshException.class)
+    public ResponseEntity<ErrorResponse> handleTokenRefreshException(com.pizzaria.exception.TokenRefreshException ex, WebRequest request) {
+        log.warn("Falha ao renovar token: {}", ex.getMessage());
+        return buildResponse(HttpStatus.FORBIDDEN, "Falha ao renovar token de acesso.", request);
+    }
+
+    @ExceptionHandler(RuntimeException.class)
+    public ResponseEntity<ErrorResponse> handleRuntimeException(RuntimeException ex, WebRequest request) {
+        log.error("Erro inesperado: ", ex);
+        return buildResponse(HttpStatus.INTERNAL_SERVER_ERROR, "Ocorreu um erro inesperado. Tente novamente mais tarde.", request);
     }
 
     @ExceptionHandler(BadRequestException.class)
@@ -84,12 +102,4 @@ public class GlobalExceptionHandler {
         );
         return new ResponseEntity<>(errorResponse, status);
     }
-
-    public record ErrorResponse(
-            int status,
-            String message,
-            LocalDateTime timestamp,
-            String path,
-            Map<String, String> validationErrors
-    ) { }
 }

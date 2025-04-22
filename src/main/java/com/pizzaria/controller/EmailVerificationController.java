@@ -15,7 +15,7 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/email")
 @RequiredArgsConstructor
-public class EmailVerificationController {
+public class EmailVerificationController extends BaseController {
 
     private final EmailVerificationService verificationService;
 

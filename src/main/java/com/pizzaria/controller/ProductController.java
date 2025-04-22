@@ -15,7 +15,7 @@ import java.util.stream.Collectors;
 @RestController
 @RequestMapping("/api/products")
 @RequiredArgsConstructor
-public class ProductController {
+public class ProductController extends BaseController {
 
     private final ProductService productService;
 

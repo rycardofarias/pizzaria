@@ -125,7 +125,7 @@ public class UserServiceImpl implements UserService {
     private void validateEmailNotExists(String email) {
         if (userRepository.existsByEmail(email)) {
             log.error("Email já cadastrado: {}", email);
-            throw new BadRequestException("Email já cadastrado");
+            throw new BadRequestException("Não foi possível concluir a solicitação.");
         }
     }
 

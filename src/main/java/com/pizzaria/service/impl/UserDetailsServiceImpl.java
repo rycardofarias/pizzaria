@@ -22,7 +22,7 @@ public class UserDetailsServiceImpl implements UserDetailsService {
         User user = userRepository.findByEmail(email)
             .orElseThrow(() -> {
                 log.error("Usuário não encontrado com o email: {}", email);
-                return new UsernameNotFoundException("Usuário não encontrado com o email: " + email);
+                return new UsernameNotFoundException("Usuário ou senha inválidos.");
             });
 
         log.debug("Usuário encontrado: {}", user.getEmail());
@@ -34,7 +34,7 @@ public class UserDetailsServiceImpl implements UserDetailsService {
         User user = userRepository.findById(id)
             .orElseThrow(() -> {
                 log.error("Usuário não encontrado com o ID: {}", id);
-                return new UsernameNotFoundException("Usuário não encontrado com o id: " + id);
+                return new UsernameNotFoundException("Usuário ou senha inválidos.");
             });
 
         log.debug("Usuário encontrado: {}", user.getEmail());

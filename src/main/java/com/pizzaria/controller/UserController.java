@@ -5,6 +5,7 @@ import com.pizzaria.dto.request.UserUpdateRequest;
 import com.pizzaria.dto.response.UserResponse;
 import com.pizzaria.entity.User;
 import com.pizzaria.service.UserService;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -14,36 +15,50 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/users")
 @RequiredArgsConstructor
-public class UserController {
+public class UserController extends BaseController {
 
     private final UserService userService;
 
     @PostMapping
-    public ResponseEntity<UserResponse> createUser(@Valid @RequestBody UserCreateRequest request) {
-        User user = userService.createUser(request);
-        return ResponseEntity.ok(UserResponse.fromEntity(user));
+    public ResponseEntity<?> createUser(@Valid @RequestBody UserCreateRequest request, HttpServletRequest httpRequest) {
+        try {
+            User user = userService.createUser(request);
+            return ResponseEntity.ok(UserResponse.fromEntity(user));
+        } catch (Exception e) {
+            return buildErrorResponse(500, "user.error.create", "/api/users", httpRequest.getLocale());
+        }
     }
 
     @GetMapping("/{id}")
     @PreAuthorize("@securityService.isOwner(#id) or hasRole('ADMIN')")
-    public ResponseEntity<UserResponse> getUser(@PathVariable Long id) {
-        User user = userService.getUserById(id);
-        return ResponseEntity.ok(UserResponse.fromEntity(user));
+    public ResponseEntity<?> getUser(@PathVariable Long id, HttpServletRequest httpRequest) {
+        try {
+            User user = userService.getUserById(id);
+            return ResponseEntity.ok(UserResponse.fromEntity(user));
+        } catch (Exception e) {
+            return buildErrorResponse(404, "user.error.not_found", "/api/users/" + id, httpRequest.getLocale());
+        }
     }
 
     @PutMapping("/{id}")
     @PreAuthorize("@securityService.isOwner(#id)")
-    public ResponseEntity<UserResponse> updateUser(
-            @PathVariable Long id,
-            @Valid @RequestBody UserUpdateRequest request) {
-        User user = userService.updateUser(id, request);
-        return ResponseEntity.ok(UserResponse.fromEntity(user));
+    public ResponseEntity<?> updateUser(@PathVariable Long id, @Valid @RequestBody UserUpdateRequest request, HttpServletRequest httpRequest) {
+        try {
+            User user = userService.updateUser(id, request);
+            return ResponseEntity.ok(UserResponse.fromEntity(user));
+        } catch (Exception e) {
+            return buildErrorResponse(400, "user.error.update", "/api/users/" + id, httpRequest.getLocale());
+        }
     }
 
     @DeleteMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<Void> deleteUser(@PathVariable Long id) {
-        userService.deleteUser(id);
-        return ResponseEntity.noContent().build();
+    public ResponseEntity<?> deleteUser(@PathVariable Long id, HttpServletRequest httpRequest) {
+        try {
+            userService.deleteUser(id);
+            return ResponseEntity.noContent().build();
+        } catch (Exception e) {
+            return buildErrorResponse(400, "user.error.delete", "/api/users/" + id, httpRequest.getLocale());
+        }
     }
 } 

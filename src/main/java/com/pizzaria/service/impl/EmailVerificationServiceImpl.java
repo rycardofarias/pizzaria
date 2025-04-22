@@ -126,14 +126,14 @@ public class EmailVerificationServiceImpl implements EmailVerificationService {
     private void validateTokenExpiration(User user) {
         if (user.getEmailVerificationTokenExpiry().isBefore(LocalDateTime.now())) {
             log.error("Token de verificação expirado para usuário: {}", user.getEmail());
-            throw new BadRequestException("Token expirado");
+            throw new BadRequestException("Código de verificação inválido ou expirado.");
         }
     }
 
     private void validateVerificationCode(User user, String code) {
         if (!user.getEmailVerificationToken().equals(code)) {
             log.error("Código de verificação inválido para usuário: {}", user.getEmail());
-            throw new BadRequestException("Código de verificação inválido");
+            throw new BadRequestException("Código de verificação inválido ou expirado.");
         }
 
         validateTokenExpiration(user);

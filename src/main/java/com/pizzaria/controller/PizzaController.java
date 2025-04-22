@@ -20,7 +20,7 @@ import java.util.stream.Collectors;
 @RestController
 @RequestMapping("/api/pizzas")
 @RequiredArgsConstructor
-public class PizzaController {
+public class PizzaController extends BaseController {
 
     private final PizzaService pizzaService;
 

@@ -21,8 +21,11 @@ import com.pizzaria.entity.LoginAttempt;
 import com.pizzaria.entity.User;
 import com.pizzaria.repository.LoginAttemptRepository;
 import com.pizzaria.repository.UserRepository;
+import com.pizzaria.repository.IpLoginAttemptRepository;
+import com.pizzaria.entity.IpLoginAttempt;
+import com.pizzaria.repository.DeviceLoginAttemptRepository;
+import com.pizzaria.entity.DeviceLoginAttempt;
 
-import lombok.RequiredArgsConstructor;
 @Slf4j
 @Service
 public class AuthServiceImpl implements AuthService {
@@ -30,13 +33,17 @@ public class AuthServiceImpl implements AuthService {
     @Autowired
     private MeterRegistry meterRegistry;
     @Autowired
-    private AuditService auditService; // Proteção força bruta
+    private AuditService auditService;
     @Autowired
     private SecurityEventNotifier securityEventNotifier;
     @Autowired
     private LoginAttemptRepository loginAttemptRepository;
     @Autowired
     private UserRepository userRepository;
+    @Autowired
+    private IpLoginAttemptRepository ipLoginAttemptRepository;
+    @Autowired
+    private DeviceLoginAttemptRepository deviceLoginAttemptRepository;
 
     @Value("${auth.max-login-attempts:5}")
     private int maxLoginAttempts;
@@ -44,9 +51,41 @@ public class AuthServiceImpl implements AuthService {
     @Value("${auth.lockout-duration-minutes:15}")
     private int lockoutDurationMinutes;
 
+    @Value("${auth.max-ip-login-attempts:10}")
+    private int maxIpLoginAttempts;
+
+    @Value("${auth.ip-lockout-duration-minutes:30}")
+    private int ipLockoutDurationMinutes;
+
+    @Value("${auth.max-device-login-attempts:1}")
+    private int maxDeviceLoginAttempts;
+
+    @Value("${auth.device-lockout-duration-minutes:30}")
+    private int deviceLockoutDurationMinutes;
+
 
     @Timed
-    public void validateLoginAttempt(String email, String ipAddress, String ipHeaders) {
+    public void validateLoginAttempt(String email, String ipAddress, String ipHeaders, String deviceFingerprint) {
+        // --- RATE LIMITING POR IP ---
+        if (ipAddress != null && !ipAddress.isBlank()) {
+            IpLoginAttempt ipAttempt = ipLoginAttemptRepository.findByIpAddress(ipAddress).orElse(null);
+            LocalDateTime now = LocalDateTime.now();
+            if (ipAttempt != null && ipAttempt.getLockoutTime() != null &&
+                ipAttempt.getLockoutTime().plusMinutes(ipLockoutDurationMinutes).isAfter(now)) {
+                log.warn("[RATE LIMIT] IP BLOQUEADO: {} | Motivo: {} tentativas falhas em {} minutos. Bloqueio até {}", ipAddress, maxIpLoginAttempts, ipLockoutDurationMinutes, ipAttempt.getLockoutTime().plusMinutes(ipLockoutDurationMinutes));
+                throw new LockedException("Muitas tentativas deste IP. Tente novamente em " + ipLockoutDurationMinutes + " minutos");
+            }
+        }
+        // --- RATE LIMITING POR DEVICE FINGERPRINT ---
+        if (deviceFingerprint != null && !deviceFingerprint.isBlank()) {
+            DeviceLoginAttempt deviceAttempt = deviceLoginAttemptRepository.findByDeviceFingerprint(deviceFingerprint).orElse(null);
+            LocalDateTime now = LocalDateTime.now();
+            if (deviceAttempt != null && deviceAttempt.getLockoutTime() != null &&
+                deviceAttempt.getLockoutTime().plusMinutes(deviceLockoutDurationMinutes).isAfter(now)) {
+                log.warn("[RATE LIMIT] DEVICE BLOQUEADO: {} | Motivo: {} tentativas falhas em {} minutos. Bloqueio até {}", deviceFingerprint, maxDeviceLoginAttempts, deviceLockoutDurationMinutes, deviceAttempt.getLockoutTime().plusMinutes(deviceLockoutDurationMinutes));
+                throw new LockedException("Muitas tentativas deste dispositivo. Tente novamente em " + deviceLockoutDurationMinutes + " minutos");
+            }
+        }
         log.info("[DEBUG] validateLoginAttempt chamado para: {}", email);
         meterRegistry.counter("auth.login.attempts.total").increment();
 
@@ -67,6 +106,7 @@ public class AuthServiceImpl implements AuthService {
         // Auditoria de tentativa durante bloqueio
         if (user != null && user.getLockoutTime() != null &&
             user.getLockoutTime().plusMinutes(lockoutDurationMinutes).isAfter(LocalDateTime.now())) {
+            log.warn("[RATE LIMIT] USUÁRIO BLOQUEADO: {} | Motivo: {} tentativas falhas em {} minutos. Bloqueio até {}", email, maxLoginAttempts, lockoutDurationMinutes, user.getLockoutTime().plusMinutes(lockoutDurationMinutes));
             log.warn("Usuário {} tentou logar, mas a conta está bloqueada até {}.", email, user.getLockoutTime().plusMinutes(lockoutDurationMinutes));
             meterRegistry.counter("auth.login.attempts.locked").increment();
             try {
@@ -93,6 +133,60 @@ public class AuthServiceImpl implements AuthService {
         LocalDateTime since = LocalDateTime.now().minusMinutes(lockoutDurationMinutes);
         int failedAttempts = loginAttemptRepository.countFailedAttempts(email, since);
         log.info("[DEBUG] Tentativas atuais para {}: {}", email, failedAttempts);
+
+        // --- RATE LIMITING POR IP ---
+        if (ipAddress != null && !ipAddress.isBlank()) {
+            IpLoginAttempt ipAttempt = ipLoginAttemptRepository.findByIpAddress(ipAddress).orElse(null);
+            LocalDateTime now = LocalDateTime.now();
+            if (ipAttempt == null) {
+                ipAttempt = new IpLoginAttempt();
+                ipAttempt.setIpAddress(ipAddress);
+                ipAttempt.setFailedAttempts(1);
+                ipAttempt.setLockoutTime(null);
+            } else {
+                // Limpa lockout se expirou
+                if (ipAttempt.getLockoutTime() != null && ipAttempt.getLockoutTime().plusMinutes(ipLockoutDurationMinutes).isBefore(now)) {
+                    ipAttempt.setFailedAttempts(0);
+                    ipAttempt.setLockoutTime(null);
+                }
+                ipAttempt.setFailedAttempts(ipAttempt.getFailedAttempts() + 1);
+            }
+            // Bloqueia IP se excedeu o limite
+            if (ipAttempt.getFailedAttempts() >= maxIpLoginAttempts) {
+                ipAttempt.setLockoutTime(now);
+            }
+            ipLoginAttemptRepository.save(ipAttempt);
+            if (ipAttempt.getLockoutTime() != null && ipAttempt.getLockoutTime().isEqual(now)) {
+                throw new LockedException("Muitas tentativas deste IP. Tente novamente em " + ipLockoutDurationMinutes + " minutos");
+            }
+        }
+
+        // --- RATE LIMITING POR DEVICE FINGERPRINT ---
+        if (deviceFingerprint != null && !deviceFingerprint.isBlank()) {
+            DeviceLoginAttempt deviceAttempt = deviceLoginAttemptRepository.findByDeviceFingerprint(deviceFingerprint).orElse(null);
+            LocalDateTime now = LocalDateTime.now();
+            if (deviceAttempt == null) {
+                deviceAttempt = new DeviceLoginAttempt();
+                deviceAttempt.setDeviceFingerprint(deviceFingerprint);
+                deviceAttempt.setFailedAttempts(1);
+                deviceAttempt.setLockoutTime(null);
+            } else {
+                // Limpa lockout se expirou
+                if (deviceAttempt.getLockoutTime() != null && deviceAttempt.getLockoutTime().plusMinutes(deviceLockoutDurationMinutes).isBefore(now)) {
+                    deviceAttempt.setFailedAttempts(0);
+                    deviceAttempt.setLockoutTime(null);
+                }
+                deviceAttempt.setFailedAttempts(deviceAttempt.getFailedAttempts() + 1);
+            }
+            // Bloqueia device se excedeu o limite
+            if (deviceAttempt.getFailedAttempts() >= maxDeviceLoginAttempts) {
+                deviceAttempt.setLockoutTime(now);
+            }
+            deviceLoginAttemptRepository.save(deviceAttempt);
+            if (deviceAttempt.getLockoutTime() != null && deviceAttempt.getLockoutTime().isEqual(now)) {
+                throw new LockedException("Muitas tentativas deste dispositivo. Tente novamente em " + deviceLockoutDurationMinutes + " minutos");
+            }
+        }
 
         // Alerta de segurança ao atingir 3 tentativas
         if (failedAttempts == 3) {
@@ -144,7 +238,7 @@ public class AuthServiceImpl implements AuthService {
     
 
     @Timed
-    public void loginSuccess(String email, String ipAddress) {
+    public void loginSuccess(String email, String ipAddress, String deviceFingerprint) {
         log.debug("[loginSuccess] Chamado para: {}", email);
         log.info("Login bem-sucedido para {}. Resetando tentativas e desbloqueando conta, se necessário.", email);
         Optional<User> userOpt = userRepository.findByEmail(email);
@@ -172,6 +266,25 @@ public class AuthServiceImpl implements AuthService {
             }
         }
         meterRegistry.counter("auth.login.success.total").increment();
+
+        // Limpeza de tentativas por IP após login bem-sucedido
+        if (ipAddress != null && !ipAddress.isBlank()) {
+            IpLoginAttempt ipAttempt = ipLoginAttemptRepository.findByIpAddress(ipAddress).orElse(null);
+            if (ipAttempt != null) {
+                ipAttempt.setFailedAttempts(0);
+                ipAttempt.setLockoutTime(null);
+                ipLoginAttemptRepository.save(ipAttempt);
+            }
+        }
+        // Limpeza de tentativas por device após login bem-sucedido
+        if (deviceFingerprint != null && !deviceFingerprint.isBlank()) {
+            DeviceLoginAttempt deviceAttempt = deviceLoginAttemptRepository.findByDeviceFingerprint(deviceFingerprint).orElse(null);
+            if (deviceAttempt != null) {
+                deviceAttempt.setFailedAttempts(0);
+                deviceAttempt.setLockoutTime(null);
+                deviceLoginAttemptRepository.save(deviceAttempt);
+            }
+        }
     }
 
     public void auditLogout(String email, String ipAddress) {

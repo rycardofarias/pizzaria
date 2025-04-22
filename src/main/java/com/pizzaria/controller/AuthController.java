@@ -9,7 +9,9 @@ import com.pizzaria.dto.response.UserResponse;
 import com.pizzaria.entity.RefreshToken;
 import com.pizzaria.entity.User;
 import com.pizzaria.exception.BadRequestException;
+import com.pizzaria.exception.LockedException;
 import com.pizzaria.exception.TokenRefreshException;
+
 import com.pizzaria.security.JwtTokenProvider;
 import com.pizzaria.service.AuthService;
 import com.pizzaria.service.RefreshTokenService;
@@ -33,7 +35,7 @@ import jakarta.servlet.http.HttpServletRequest;
 @RequiredArgsConstructor
 @RestController
 @RequestMapping("/api/auth")
-public class AuthController {
+public class AuthController extends BaseController {
 
     private final AuthenticationManager authenticationManager;
     private final JwtTokenProvider tokenProvider;
@@ -70,13 +72,13 @@ public class AuthController {
 
     @PostMapping("/login")
     @Timed
-    public ResponseEntity<JwtResponse> login(@Valid @RequestBody LoginRequest request, HttpServletRequest servletRequest) {
+    public ResponseEntity<?> login(@Valid @RequestBody LoginRequest request, HttpServletRequest servletRequest, @RequestHeader(value = "X-Device-Fingerprint", required = false) String deviceFingerprint) {
         log.info("Tentativa de login para o usuário: {} | Thread: {} | Timestamp: {}", request.getEmail(), Thread.currentThread().getId(), System.currentTimeMillis());
         String clientIp = extractClientIp(servletRequest);
         String ipHeaders = getIpHeadersRaw(servletRequest);
         try {
             // Chama o controle de tentativas e alerta
-            authService.validateLoginAttempt(request.getEmail(), clientIp, ipHeaders);
+            authService.validateLoginAttempt(request.getEmail(), clientIp, ipHeaders, deviceFingerprint);
 
             Authentication authentication = authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword())
@@ -88,29 +90,39 @@ public class AuthController {
 
             if (!userDetails.isEmailVerified()) {
                 log.warn("Usuário {} tentou fazer login, mas o email não está verificado.", request.getEmail());
-                throw new BadRequestException("Email não verificado. Por favor, verifique seu email.");
+                throw new BadRequestException("login.error.email_not_verified");
             }
 
             String jwt = tokenProvider.generateToken(authentication);
             String refreshToken = refreshTokenService.createRefreshToken(userDetails.getUser()).getToken();
 
-            authService.loginSuccess(request.getEmail(), clientIp);
+            authService.loginSuccess(request.getEmail(), clientIp, deviceFingerprint);
             log.info("Login realizado com sucesso para usuário: {}", request.getEmail());
 
             return ResponseEntity.ok(new JwtResponse(jwt, refreshToken));
 
-        } catch (BadCredentialsException e) {
+        } catch (BadCredentialsException | UsernameNotFoundException e) {
             log.warn("Credenciais inválidas para o usuário: {}", request.getEmail());
-            throw new BadRequestException("Credenciais inválidas");
-        } catch (Exception e) {
-            log.error("Erro inesperado ao tentar autenticar usuário {}: {}", request.getEmail(), e.getMessage());
-            throw new BadRequestException("Erro ao processar a requisição de login.");
+            return buildErrorResponse(401, "login.error.invalid", "/api/auth/login", servletRequest.getLocale());
+        } catch (LockedException | org.springframework.security.authentication.LockedException e) {
+            log.warn("Usuário/IP/Device bloqueado: {}", request.getEmail());
+            return buildErrorResponse(423, "login.error.locked", "/api/auth/login", servletRequest.getLocale());
+        }
+        catch (BadRequestException e) {
+            log.warn("Erro de requisição: {}", e.getMessage());
+            return buildErrorResponse(400, e.getMessage(), "/api/auth/login", servletRequest.getLocale());
+        }
+        catch (IllegalArgumentException e) {
+            log.warn("Argumento inválido: {}", e.getMessage());
+            return buildErrorResponse(400, "login.error.bad_request", "/api/auth/login", servletRequest.getLocale());
         }
     }
 
+
+
     @PostMapping("/refresh")
     @Timed(value = "auth.refresh.endpoint", description = "Time taken to process token refresh")
-    public ResponseEntity<TokenRefreshResponse> refreshToken(@Valid @RequestBody TokenRefreshRequest request, HttpServletRequest servletRequest) {
+    public ResponseEntity<?> refreshToken(@Valid @RequestBody TokenRefreshRequest request, HttpServletRequest servletRequest) {
         log.info("Tentativa de refresh token");
 
         try {
@@ -130,39 +142,62 @@ public class AuthController {
             return ResponseEntity.ok(new TokenRefreshResponse(token, request.getRefreshToken()));
         } catch (TokenRefreshException e) {
             log.error("Erro ao renovar token: {}", e.getMessage());
-            throw e;
+            return buildErrorResponse(400, "refresh.error.invalid", "/api/auth/refresh", servletRequest.getLocale());
+        } catch (IllegalArgumentException e) {
+            log.warn("Argumento inválido ao renovar token: {}", e.getMessage());
+            return buildErrorResponse(400, "login.error.bad_request", "/api/auth/refresh", servletRequest.getLocale());
+        } catch (Exception e) {
+            log.error("Erro inesperado ao renovar token: {}", e.getMessage());
+            return buildErrorResponse(500, "login.error.unexpected", "/api/auth/refresh", servletRequest.getLocale());
         }
     }
 
     @PostMapping("/logout")
-    public ResponseEntity<Void> logout(@RequestHeader("Authorization") String token, HttpServletRequest servletRequest) {
+    public ResponseEntity<?> logout(@RequestHeader("Authorization") String token, HttpServletRequest servletRequest) {
         log.info("Tentativa de logout");
+        try {
+            String jwt = token.substring(7);
+            String username = tokenProvider.getUsernameFromJWT(jwt);
+            User user = userService.findByEmail(username)
+                    .orElseThrow(() -> new UsernameNotFoundException("Usuário não encontrado: " + username));
 
-        String jwt = token.substring(7);
-        String username = tokenProvider.getUsernameFromJWT(jwt);
-        User user = userService.findByEmail(username)
-                .orElseThrow(() -> new UsernameNotFoundException("Usuário não encontrado: " + username));
+            refreshTokenService.deleteByUserId(user.getId());
 
-        refreshTokenService.deleteByUserId(user.getId());
+            String ipAddress = extractClientIp(servletRequest);
+            authService.auditLogout(user.getEmail(), ipAddress);
 
-        String ipAddress = extractClientIp(servletRequest);
-        authService.auditLogout(user.getEmail(), ipAddress);
-
-        log.info("Logout realizado com sucesso");
-        return ResponseEntity.ok().build();
+            log.info("Logout realizado com sucesso");
+            return ResponseEntity.ok().build();
+        } catch (UsernameNotFoundException e) {
+            log.warn("Usuário não encontrado ao tentar logout: {}", e.getMessage());
+            return buildErrorResponse(404, "login.error.user_not_found", "/api/auth/logout", servletRequest.getLocale());
+        } catch (IllegalArgumentException e) {
+            log.warn("Argumento inválido ao tentar logout: {}", e.getMessage());
+            return buildErrorResponse(400, "login.error.bad_request", "/api/auth/logout", servletRequest.getLocale());
+        } catch (Exception e) {
+            log.error("Erro inesperado ao tentar logout: {}", e.getMessage());
+            return buildErrorResponse(500, "login.error.unexpected", "/api/auth/logout", servletRequest.getLocale());
+        }
     }
 
     @PostMapping("/register")
-    public ResponseEntity<UserResponse> register(@Valid @RequestBody UserCreateRequest request, HttpServletRequest servletRequest) {
+    public ResponseEntity<?> register(@Valid @RequestBody UserCreateRequest request, HttpServletRequest servletRequest) {
         log.info("Tentativa de registro para usuário: {}", request.getEmail());
-
-        User user = userService.createUser(request);
-
-        String ipAddress = extractClientIp(servletRequest);
-        authService.auditRegister(user.getEmail(), ipAddress);
-
-        log.info("Usuário registrado com sucesso: {}", request.getEmail());
-        return ResponseEntity.ok(UserResponse.fromEntity(user));
+        try {
+            User user = userService.createUser(request);
+            String ipAddress = extractClientIp(servletRequest);
+            authService.auditRegister(user.getEmail(), ipAddress);
+            log.info("Usuário registrado com sucesso: {}", request.getEmail());
+            return ResponseEntity.ok(UserResponse.fromEntity(user));
+        } catch (IllegalArgumentException e) {
+            log.warn("Argumento inválido ao registrar usuário: {}", e.getMessage());
+            return buildErrorResponse(400, "login.error.bad_request", "/api/auth/register", servletRequest.getLocale());
+        } catch (BadRequestException e) {
+            log.warn("Erro de requisição ao registrar usuário: {}", e.getMessage());
+            return buildErrorResponse(400, e.getMessage(), "/api/auth/register", servletRequest.getLocale());
+        } catch (Exception e) {
+            log.error("Erro inesperado ao registrar usuário: {}", e.getMessage());
+            return buildErrorResponse(500, "login.error.unexpected", "/api/auth/register", servletRequest.getLocale());
+        }
     }
-    
 }

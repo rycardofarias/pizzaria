@@ -13,32 +13,41 @@ import org.springframework.web.bind.annotation.*;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.stream.Collectors;
+import jakarta.servlet.http.HttpServletRequest;
 
 @Slf4j
 @RestController
 @RequestMapping("/api/ingredients")
 @RequiredArgsConstructor
-public class IngredientController {
+public class IngredientController extends BaseController {
 
     private final IngredientService ingredientService;
 
     @PostMapping
-    public ResponseEntity<IngredientResponse> createIngredient(@Valid @RequestBody IngredientRequest request) {
-        log.info("Requisição para criar novo ingrediente: {}", request.getName());
-        Ingredient ingredient = ingredientService.createIngredient(request);
-        log.debug("Ingrediente criado com sucesso. ID: {}", ingredient.getId());
-        return ResponseEntity.ok(IngredientResponse.fromEntity(ingredient));
+    public ResponseEntity<?> createIngredient(@Valid @RequestBody IngredientRequest request, HttpServletRequest httpRequest) {
+        try {
+            log.info("Requisição para criar novo ingrediente: {}", request.getName());
+            Ingredient ingredient = ingredientService.createIngredient(request);
+            log.debug("Ingrediente criado com sucesso. ID: {}", ingredient.getId());
+            return ResponseEntity.ok(IngredientResponse.fromEntity(ingredient));
+        } catch (Exception e) {
+            return buildErrorResponse(500, "ingredient.error.unexpected", "/api/ingredients", httpRequest.getLocale());
+        }
     }
 
     @GetMapping
-    public ResponseEntity<List<IngredientResponse>> getAllIngredients() {
-        log.info("Requisição para listar todos os ingredientes");
-        List<Ingredient> ingredients = ingredientService.getAllIngredients();
-        List<IngredientResponse> response = ingredients.stream()
-                .map(IngredientResponse::fromEntity)
-                .collect(Collectors.toList());
-        log.debug("Retornando {} ingredientes", ingredients.size());
-        return ResponseEntity.ok(response);
+    public ResponseEntity<?> getAllIngredients(HttpServletRequest request) {
+        try {
+            log.info("Requisição para listar todos os ingredientes");
+            List<Ingredient> ingredients = ingredientService.getAllIngredients();
+            List<IngredientResponse> response = ingredients.stream()
+                    .map(IngredientResponse::fromEntity)
+                    .collect(Collectors.toList());
+            log.debug("Retornando {} ingredientes", ingredients.size());
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            return buildErrorResponse(500, "ingredient.error.unexpected", "/api/ingredients", request.getLocale());
+        }
     }
 
     @GetMapping("/{id}")
